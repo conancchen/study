@@ -1,0 +1,758 @@
+<!DOCTYPE HTML>
+<html lang="en">
+
+<head>
+  <title>Study With Me — conan</title>
+
+  <!-- Runs before paint so the saved theme applies without a flash -->
+  <script>
+    (function () {
+      document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'dark');
+
+      // Hides the page before first paint, so it never
+      // flashes fully rendered first. Skipped entirely under reduced motion,
+      // so that path never hides anything.
+      var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!reduceMotion) {
+        document.documentElement.classList.add('anim-hide');
+      }
+    })();
+  </script>
+
+  <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+  <meta name="google" content="notranslate">
+
+  <meta name="author" content="Conan Chen" />
+  <!-- Keeps search engines from listing the site; it is only for people who have the link -->
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap">
+
+  <!-- Build timestamp busts the browser cache whenever the site is rebuilt -->
+  <link rel="stylesheet" type="text/css" href="./style.css" />
+  <link rel="canonical" href="https://conancchen.github.io/study/">
+
+  <link rel="icon" type="image/x-icon" href="./favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="./images/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./images/favicon-16.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./images/favicon-192.png">
+  <link rel="apple-touch-icon" href="./images/apple-touch-icon.png">
+</head>
+
+<body>
+  <div class="page">
+    <header class="header">
+      <div class="header-row">
+        
+        <div class="header-actions">
+        <a class="icon-button" href="https://conancchen.github.io/" aria-label="Back to the home page" title="Back">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="7 3 3 7 7 11"></polyline>
+            <path d="M3 7h11a6 6 0 0 1 0 12H6"></path>
+          </svg>
+        </a>
+        <button class="icon-button" id="theme-toggle" onclick="toggleTheme()" aria-label="Switch to dark mode" title="Switch to dark mode">
+          <svg class="icon-yinyang" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd">
+            <path class="yin" d="M12 1.75 A10.25 10.25 0 0 0 12 22.25 A5.125 5.125 0 0 0 12 12 A5.125 5.125 0 0 1 12 1.75 Z M13.6 17.125 A1.6 1.6 0 1 0 10.4 17.125 A1.6 1.6 0 1 0 13.6 17.125 Z M13.6 6.875 A1.6 1.6 0 1 0 10.4 6.875 A1.6 1.6 0 1 0 13.6 6.875 Z"></path>
+            <path class="yang" d="M12 1.75 A10.25 10.25 0 0 1 12 22.25 A5.125 5.125 0 0 0 12 12 A5.125 5.125 0 0 1 12 1.75 Z M13.6 6.875 A1.6 1.6 0 1 0 10.4 6.875 A1.6 1.6 0 1 0 13.6 6.875 Z M13.6 17.125 A1.6 1.6 0 1 0 10.4 17.125 A1.6 1.6 0 1 0 13.6 17.125 Z"></path>
+          </svg>
+        </button>
+        </div>
+      </div>
+      
+    </header>
+
+    <script>
+      // Scrambles text into new text, churning through random characters that
+      // lock in left to right. It takes a list of [element, text] parts and
+      // treats them as one line, so a sentence split across several elements
+      // scrambles as a whole. A part's text can be a function, read afresh every
+      // frame, for text that keeps changing underneath (like a ticking clock).
+      // Digits churn through digits and everything else through letters;
+      // spaces stay put. Calls done() once every part has settled.
+      window.scrambleSwap = function (parts, ms, done) {
+        var TICK = 40;  // ms between scramble frames
+        var LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+        var DIGITS = '0123456789';
+        var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        function read(part) {
+          return typeof part[1] === 'function' ? part[1]() : part[1];
+        }
+        function settle() {
+          parts.forEach(function (part) { part[0].textContent = read(part); });
+          if (done) done();
+        }
+        if (reduceMotion) { settle(); return; }
+
+        var length = parts.reduce(function (sum, part) { return sum + read(part).length; }, 0);
+        var ticks = Math.max(2, Math.round(ms / TICK));
+        var lockStart = ticks * 0.25;
+        var step = length > 1 ? (ticks - 1 - lockStart) / (length - 1) : 0;
+        var n = 0;
+        var id = setInterval(function () {
+          var at = 0;  // position along the whole line
+          parts.forEach(function (part) {
+            var text = read(part);
+            var out = '';
+            for (var i = 0; i < text.length; i++, at++) {
+              var c = text.charAt(i);
+              var pool = /\d/.test(c) ? DIGITS : LETTERS;
+              out += (n >= lockStart + at * step || /\s/.test(c))
+                ? c : pool.charAt(Math.floor(Math.random() * pool.length));
+            }
+            part[0].textContent = out;
+          });
+          if (++n > ticks) {
+            clearInterval(id);
+            settle();
+          }
+        }, TICK);
+      };
+    </script>
+
+    <section class="block study">
+  <p class="study-heading"><span class="study-phase" id="phase">Session 1</span><span class="study-at"> – <span class="study-time" id="time">0:00</span></span></p>
+  <div class="study-clock">
+    <svg class="study-dial" id="dial" viewBox="0 0 200 200" aria-hidden="true">
+      <circle class="study-dial-face" cx="100" cy="100" r="92"></circle>
+      <circle class="study-dial-arc" id="arc" cx="100" cy="100" r="92" pathLength="1" transform="rotate(-90 100 100)"></circle>
+      <g id="ticks"></g>
+      <g class="study-dial-hands">
+        <line class="study-dial-minute" id="minute-hand" x1="100" y1="106" x2="100" y2="40"></line>
+        <line class="study-dial-second" id="second-hand" x1="100" y1="114" x2="100" y2="22"></line>
+        <circle class="study-dial-pin" cx="100" cy="100" r="3"></circle>
+      </g>
+    </svg>
+  </div>
+  <p class="study-total" id="total">0:00 studied · 0:00 break</p>
+
+  <div class="study-controls">
+    <button class="study-button" id="start" type="button">Start</button>
+    <button class="study-button" id="lap" type="button" disabled>Break</button>
+    <button class="study-button" id="reset" type="button" disabled>Reset</button>
+  </div>
+
+  <div class="study-mode">
+    <button class="study-mode-option" id="mode-stopwatch" type="button">Stopwatch</button>
+    <button class="study-mode-option" id="mode-timer" type="button">Timer</button>
+  </div>
+  <div class="study-timer-settings" id="timer-settings">
+    <p class="study-lengths">
+      Session <input class="study-length" id="length-study" type="number" min="0" max="600" step="any" inputmode="decimal" aria-label="Session minutes"> min
+      · Break <input class="study-length" id="length-brk" type="number" min="0" max="600" step="any" inputmode="decimal" aria-label="Break minutes"> min
+    </p>
+  </div>
+</section>
+
+<section class="block">
+  <ol class="study-laps" id="laps"></ol>
+</section>
+
+<section class="block study-stats">
+  <h2 class="block-label block-label-plain">Stats</h2>
+  <div class="row"><span>Today</span><span class="row-year" id="stat-today"></span></div>
+  <div class="row"><span>This week</span><span class="row-year" id="stat-week"></span></div>
+  <div class="row"><span>All time</span><span class="row-year" id="stat-all"></span></div>
+  <div class="row"><span>Streak</span><span class="row-year" id="stat-streak"></span></div>
+
+  <div class="study-chart" id="chart" role="img"></div>
+  <p class="study-chart-caption" id="chart-caption"></p>
+
+  <p class="study-backup">
+    <button class="study-backup-option" id="export" type="button">Export</button>
+    · <button class="study-backup-option" id="import" type="button">Import</button>
+    · <button class="study-backup-option" id="reset-stats" type="button">Reset stats</button>
+    <input id="import-file" type="file" accept="application/json,.json" hidden>
+  </p>
+</section>
+
+<script>
+  // A stopwatch that runs in turns: a study session, then a break, then the
+  // next session, and so on. The lap button closes the current turn and starts
+  // the other kind; every finished turn goes on the list, newest on top. The
+  // whole thing is saved as it goes, so a refresh or a closed tab picks back up
+  // where it left off (a running timer keeps counting while the tab is gone).
+  // The dial shows the current turn on an analog face: the second hand sweeps
+  // once a minute, the minute hand and the arc around the rim once an hour.
+  // The digital readout follows the current turn's name, above the dial.
+  // In timer mode each turn counts down from its set length instead (the hands
+  // wind down with it, and the arc fills from empty to a full ring at zero);
+  // at zero a chime plays and the next turn starts on its own. Space starts
+  // and pauses, Enter laps.
+  //
+  // Every finished turn is also logged to a history that a reset leaves alone,
+  // and the stats below are worked out from it (plus the turn on the clock).
+  // It all lives in this browser only; Export and Import move it by hand. Any turn, the current one included,
+  // can be renamed by clicking its underlined name and typing straight into it;
+  // clearing the name puts the default back.
+  (function () {
+    var KEY = 'study-timer';
+    // Kept apart so a reset leaves it be; renamed once so older saved lengths
+    // gave way to the 50/10 default
+    var SETTINGS_KEY = 'study-settings-2';
+    var HISTORY_KEY = 'study-history';
+    var CHART_DAYS = 5;
+    var LABEL = { study: 'Session', brk: 'Break' };
+
+    // laps: finished turns, oldest first, as { kind, ms, at, name }
+    // current: the turn on the clock, with the ms banked before the last start
+    // (at is when the turn first started; name is only set once renamed)
+    // since: when the clock last started, or null while paused
+    var state = load(KEY) || fresh();
+
+    // mode: 'stopwatch' or 'timer'; minutes: each kind's length in timer mode
+    var settings = load(SETTINGS_KEY) || { mode: 'timer', minutes: { study: 50, brk: 10 } };
+
+    // history: every finished turn ever, oldest first, as { kind, ms, at }.
+    // The first time round it starts from whatever is already on the list.
+    var history = load(HISTORY_KEY) || state.laps.map(record);
+
+    var phaseEl = document.getElementById('phase');
+    var timeEl = document.getElementById('time');
+    var totalEl = document.getElementById('total');
+    var startBtn = document.getElementById('start');
+    var lapBtn = document.getElementById('lap');
+    var resetBtn = document.getElementById('reset');
+    var lapsEl = document.getElementById('laps');
+    var arcEl = document.getElementById('arc');
+    var minuteHand = document.getElementById('minute-hand');
+    var secondHand = document.getElementById('second-hand');
+    var modeButtons = { stopwatch: document.getElementById('mode-stopwatch'), timer: document.getElementById('mode-timer') };
+    var timerSettingsEl = document.getElementById('timer-settings');
+    var lengthInputs = { study: document.getElementById('length-study'), brk: document.getElementById('length-brk') };
+
+    function fresh() {
+      return { laps: [], current: { kind: 'study', ms: 0 }, since: null };
+    }
+
+    function load(key) {
+      try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; }
+    }
+
+    function save() {
+      try {
+        localStorage.setItem(KEY, JSON.stringify(state));
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+      } catch (e) {}
+    }
+
+    function timed() {
+      return settings.mode === 'timer';
+    }
+
+    // How long the current kind of turn runs in timer mode, in ms
+    function target(kind) {
+      return settings.minutes[kind] * 60000;
+    }
+
+    function elapsed() {
+      return state.current.ms + (state.since ? Date.now() - state.since : 0);
+    }
+
+    // Counting down rounds up, so a fresh 25 minutes reads 25:00, not 24:59
+    function format(ms, up) {
+      var s = up ? Math.ceil(ms / 1000) : Math.floor(ms / 1000);
+      var h = Math.floor(s / 3600);
+      var m = Math.floor(s / 60) % 60;
+      var sec = s % 60;
+      var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+      return h ? h + ':' + pad(m) + ':' + pad(sec) : m + ':' + pad(sec);
+    }
+
+    // Which number a turn is among turns of its kind, counting up to index i
+    function ordinal(kind, i) {
+      var n = 1;
+      for (var j = 0; j < i; j++) if (state.laps[j].kind === kind) n++;
+      return n;
+    }
+
+    // A turn's own name if it has one, else its kind and number
+    function title(turn, i) {
+      return turn.name || LABEL[turn.kind] + ' ' + ordinal(turn.kind, i);
+    }
+
+    // Makes a name editable in place: click and type. Enter or clicking away
+    // saves it, Escape backs out. Typing over the default name starts fresh.
+    function editable(el, turn, i) {
+      if (document.activeElement === el) return;  // leave it alone mid-edit
+      el.textContent = title(turn, i);
+      el.contentEditable = 'plaintext-only';
+      el.spellcheck = false;
+      el.title = 'Rename';
+      el.onkeydown = function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+        else if (e.key === 'Escape') { el.textContent = title(turn, i); el.blur(); }
+      };
+      el.onblur = function () {
+        el.scrollLeft = 0;
+        var name = el.textContent.replace(/\s+/g, ' ').trim();
+        if (name === LABEL[turn.kind] + ' ' + ordinal(turn.kind, i)) name = '';
+        if (name) turn.name = name; else delete turn.name;
+        save();
+        render();
+      };
+    }
+
+    // Sixty marks around the face, longer at every fifth minute
+    (function () {
+      var ticks = document.getElementById('ticks');
+      for (var m = 0; m < 60; m++) {
+        var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', 100);
+        line.setAttribute('x2', 100);
+        line.setAttribute('y1', 14);
+        line.setAttribute('y2', m % 5 ? 18 : 23);
+        line.setAttribute('class', m % 5 ? 'study-dial-tick' : 'study-dial-tick study-dial-tick-major');
+        line.setAttribute('transform', 'rotate(' + m * 6 + ' 100 100)');
+        ticks.appendChild(line);
+      }
+    })();
+
+    // fill: how much of the rim the arc covers, 0 to 1
+    function dial(ms, fill) {
+      var s = ms / 1000;
+      secondHand.setAttribute('transform', 'rotate(' + (s % 60) * 6 + ' 100 100)');
+      minuteHand.setAttribute('transform', 'rotate(' + (s / 60 % 60) * 6 + ' 100 100)');
+      arcEl.style.strokeDashoffset = 1 - fill;
+      arcEl.style.opacity = fill ? 1 : 0;  // no stray round cap at zero
+    }
+
+    // Two soft notes when a countdown runs out. The audio context is made on
+    // the first press of Start, since browsers only allow sound after a click.
+    var audio;
+    function unlockAudio() {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!audio && Ctx) audio = new Ctx();
+      if (audio && audio.state === 'suspended') audio.resume();
+    }
+    function chime() {
+      if (!audio) return;
+      [880, 1320].forEach(function (freq, n) {
+        var t = audio.currentTime + n * 0.22;
+        var osc = audio.createOscillator();
+        var gain = audio.createGain();
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.2, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+        osc.connect(gain).connect(audio.destination);
+        osc.start(t);
+        osc.stop(t + 1);
+      });
+    }
+
+    // In timer mode, closes every turn whose countdown has run out (more than
+    // one if the tab was away), each ending exactly on time, with the next
+    // starting where it ended. Chimes only if the last one just ran out.
+    function advance() {
+      if (!timed() || !state.since) return;
+      var ended = null;
+      while (elapsed() >= target(state.current.kind)) {
+        var length = target(state.current.kind);
+        ended = state.since + (length - state.current.ms);
+        state.current.ms = length;
+        state.laps.push(state.current);
+        history.push(record(state.current));
+        state.current = { kind: state.current.kind === 'study' ? 'brk' : 'study', ms: 0, at: ended };
+        state.since = ended;
+      }
+      if (ended === null) return;
+      if (Date.now() - ended < 5000) chime();
+      save();
+      render();
+    }
+
+    // " – 1:23 PM" after a name, for when the turn started
+    function startedAt(turn) {
+      return turn.at
+        ? ' – ' + new Date(turn.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+        : '';
+    }
+
+    function tick() {
+      var now = elapsed();
+      if (timed()) {
+        var left = Math.max(0, target(state.current.kind) - now);
+        dial(left, 1 - left / target(state.current.kind));
+        timeEl.textContent = format(left, true);
+      } else {
+        dial(now, now / 3600000 % 1);
+        timeEl.textContent = format(now);
+      }
+      var totals = { study: 0, brk: 0 };
+      state.laps.forEach(function (lap) { totals[lap.kind] += lap.ms; });
+      totals[state.current.kind] += now;
+
+      totalEl.textContent = format(totals.study) + ' studied · ' + format(totals.brk) + ' break';
+      document.title = state.since
+        ? timeEl.textContent + ' · ' + title(state.current, state.laps.length)
+        : 'Study With Me — conan';
+    }
+
+    function render() {
+      var kind = state.current.kind;
+      editable(phaseEl, state.current, state.laps.length);
+      phaseEl.classList.toggle('study-phase-break', kind === 'brk');
+      startBtn.textContent = state.since ? 'Pause' : (elapsed() ? 'Resume' : 'Start');
+      lapBtn.textContent = kind === 'study' ? 'Break' : 'Study';
+      lapBtn.disabled = !elapsed();
+      resetBtn.disabled = !elapsed() && !state.laps.length;
+
+      for (var mode in modeButtons) {
+        modeButtons[mode].setAttribute('aria-pressed', settings.mode === mode);
+      }
+      timerSettingsEl.hidden = !timed();
+      for (var k in lengthInputs) {
+        if (document.activeElement !== lengthInputs[k]) lengthInputs[k].value = settings.minutes[k];
+      }
+
+      lapsEl.innerHTML = '';
+      for (var i = state.laps.length - 1; i >= 0; i--) {
+        var lap = state.laps[i];
+        var li = document.createElement('li');
+        li.className = 'row study-lap' + (lap.kind === 'brk' ? ' study-lap-break' : '');
+        var label = document.createElement('span');
+        label.className = 'study-label';
+        var name = document.createElement('span');
+        name.className = 'study-name';
+        editable(name, lap, i);
+        var at = document.createElement('span');
+        at.className = 'study-at';
+        at.textContent = startedAt(lap);
+        label.appendChild(name);
+        label.appendChild(at);
+        var time = document.createElement('span');
+        time.className = 'row-year';
+        time.textContent = format(lap.ms);
+        li.appendChild(label);
+        li.appendChild(time);
+        lapsEl.appendChild(li);
+      }
+      tick();
+      stats();
+    }
+
+    // Just what the stats need from a turn
+    function record(turn) {
+      return { kind: turn.kind, ms: turn.ms, at: turn.at };
+    }
+
+    // "2h 05m", "35m", or "40s" under a minute
+    function duration(ms) {
+      var m = Math.floor(ms / 60000);
+      if (!m && ms) return Math.floor(ms / 1000) + 's';
+      return m >= 60 ? Math.floor(m / 60) + 'h ' + ('0' + m % 60).slice(-2) + 'm' : m + 'm';
+    }
+
+    // Local midnight at the start of the day t falls in
+    function dayStart(t) {
+      var d = new Date(t);
+      d.setHours(0, 0, 0, 0);
+      return d.getTime();
+    }
+
+    function stepBack(day) {
+      var d = new Date(day);
+      d.setDate(d.getDate() - 1);
+      return d.getTime();
+    }
+
+    function stats() {
+      var turns = history.slice();
+      if (elapsed()) turns.push({ kind: state.current.kind, ms: elapsed(), at: state.current.at || Date.now() });
+      var study = turns.filter(function (t) { return t.kind === 'study' && t.ms > 0; });
+
+      var today = dayStart(Date.now());
+      var week = new Date(today);
+      week.setDate(week.getDate() - (week.getDay() + 6) % 7);  // weeks start Monday
+      week = week.getTime();
+
+      // Study time per day, keyed by that day's midnight; a turn counts on the
+      // day it started
+      var byDay = {};
+      var all = 0, todayMs = 0, weekMs = 0;
+      study.forEach(function (t) {
+        all += t.ms;
+        if (!t.at) return;
+        var d = dayStart(t.at);
+        byDay[d] = (byDay[d] || 0) + t.ms;
+        if (d === today) todayMs += t.ms;
+        if (d >= week) weekMs += t.ms;
+      });
+
+      // Days in a row with any studying, up to today (or up to yesterday, if
+      // today hasn't started yet)
+      var streak = 0;
+      var d = byDay[today] ? today : stepBack(today);
+      while (byDay[d]) { streak++; d = stepBack(d); }
+
+      document.getElementById('stat-today').textContent = duration(todayMs);
+      document.getElementById('stat-week').textContent = duration(weekMs);
+      document.getElementById('stat-all').textContent = duration(all);
+      document.getElementById('stat-streak').textContent = streak + (streak === 1 ? ' day' : ' days');
+
+      chart(byDay, today);
+    }
+
+    // The last few days as bars, today on the right, each with its weekday
+    // under it. Hovering a bar puts its date and time in the caption;
+    // otherwise the caption sums the days shown.
+    function chart(byDay, today) {
+      var el = document.getElementById('chart');
+      var caption = document.getElementById('chart-caption');
+      var days = [];
+      for (var n = CHART_DAYS - 1, t = today; n >= 0; n--, t = stepBack(t)) {
+        days.unshift({ t: t, ms: byDay[t] || 0 });
+      }
+      var max = Math.max(3600000, Math.max.apply(null, days.map(function (d) { return d.ms; })));
+      var total = days.reduce(function (sum, d) { return sum + d.ms; }, 0);
+      var resting = duration(total) + ' over the last ' + CHART_DAYS + ' days';
+      function label(d) {
+        return new Date(d.t).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + duration(d.ms);
+      }
+
+      el.setAttribute('aria-label', 'Study time per day: ' + days.map(label).join(', '));
+      el.innerHTML = '';
+      days.forEach(function (d) {
+        var col = document.createElement('div');
+        col.className = 'study-chart-col' + (d.t === today ? ' study-chart-today' : '');
+        var bar = document.createElement('div');
+        bar.className = 'study-chart-bar';
+        bar.style.height = d.ms ? Math.max(2, d.ms / max * 100) + '%' : '0';
+        var day = document.createElement('span');
+        day.className = 'study-chart-day';
+        day.textContent = d.t === today ? 'Today' : new Date(d.t).toLocaleDateString([], { weekday: 'short' });
+        var plot = document.createElement('div');
+        plot.className = 'study-chart-plot';
+        plot.appendChild(bar);
+        col.appendChild(plot);
+        col.appendChild(day);
+        col.onmouseenter = function () { caption.textContent = label(d); };
+        col.onmouseleave = function () { caption.textContent = resting; };
+        el.appendChild(col);
+      });
+      caption.textContent = resting;
+    }
+
+    // Saves the history and settings to a file, and reads one back in,
+    // replacing what's here
+    function exportData() {
+      var blob = new Blob([JSON.stringify({ history: history, settings: settings }, null, 2)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'study-' + new Date().toISOString().slice(0, 10) + '.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function importData(file) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var data = JSON.parse(reader.result);
+          if (!Array.isArray(data.history)) throw new Error();
+          if (!confirm('Replace your stats with the ' + data.history.length + ' turns in this file?')) return;
+          history = data.history.map(record);
+          if (data.settings) settings = data.settings;
+          save();
+          render();
+        } catch (e) {
+          alert('That file isn\'t a study export.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function toggle() {
+      if (state.since) {
+        state.current.ms = elapsed();
+        state.since = null;
+      } else {
+        unlockAudio();
+        state.since = Date.now();
+        if (!state.current.at) state.current.at = state.since;
+      }
+      save();
+      render();
+    }
+
+    function lap() {
+      if (!elapsed()) return;
+      var running = !!state.since;
+      state.current.ms = elapsed();
+      state.laps.push(state.current);
+      history.push(record(state.current));
+      state.current = { kind: state.current.kind === 'study' ? 'brk' : 'study', ms: 0 };
+      state.since = running ? Date.now() : null;
+      if (running) state.current.at = state.since;
+      save();
+      render();
+    }
+
+    function reset() {
+      if (state.laps.length && !confirm('Clear the list? Your stats are kept.')) return;
+      if (elapsed()) history.push(record({ kind: state.current.kind, ms: elapsed(), at: state.current.at }));
+      state = fresh();
+      save();
+      render();
+    }
+
+    startBtn.addEventListener('click', toggle);
+    lapBtn.addEventListener('click', lap);
+    resetBtn.addEventListener('click', reset);
+
+    // Clears the history the stats come from; the turn on the clock carries on
+    document.getElementById('reset-stats').addEventListener('click', function () {
+      if (!confirm('Erase all your study stats? This can\'t be undone; export first to keep a copy.')) return;
+      history = [];
+      save();
+      render();
+    });
+
+    var importInput = document.getElementById('import-file');
+    document.getElementById('export').addEventListener('click', exportData);
+    document.getElementById('import').addEventListener('click', function () { importInput.click(); });
+    importInput.addEventListener('change', function () {
+      if (importInput.files[0]) importData(importInput.files[0]);
+      importInput.value = '';
+    });
+
+    Object.keys(modeButtons).forEach(function (mode) {
+      modeButtons[mode].addEventListener('click', function () {
+        settings.mode = mode;
+        save();
+        render();
+        advance();  // a turn already past its length ends right away
+      });
+    });
+
+    Object.keys(lengthInputs).forEach(function (kind) {
+      var input = lengthInputs[kind];
+      input.addEventListener('change', function () {
+        var minutes = Math.round(Number(input.value) * 100) / 100;
+        if (minutes > 0 && minutes <= 600) settings.minutes[kind] = minutes;
+        input.value = settings.minutes[kind];
+        save();
+        render();
+        advance();
+      });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') input.blur();
+      });
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest('button, a, input, textarea, [contenteditable]')) return;
+      if (e.key === ' ') { e.preventDefault(); toggle(); }
+      else if (e.key === 'Enter') { e.preventDefault(); lap(); }
+    });
+
+    render();
+    // Every frame while running, so the second hand sweeps instead of jumping
+    (function frame() {
+      if (state.since) { advance(); tick(); }
+      requestAnimationFrame(frame);
+    })();
+    // Frames stop in a background tab, so this keeps countdowns ending on time
+    setInterval(advance, 1000);
+    // Keeps today's total and the chart moving while the clock runs
+    setInterval(function () { if (state.since) stats(); }, 15000);
+  })();
+</script>
+
+  </div>
+
+  <div id="copy-toast">Copied to clipboard</div>
+
+  <script>
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      var label = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+      var toggle = document.getElementById('theme-toggle');
+      toggle.setAttribute('aria-label', label);
+      toggle.setAttribute('title', label);
+    }
+
+    // Each switch spins the yin-yang one full turn: clockwise into dark,
+    // counterclockwise into light
+    var yinyangAngle = 0;
+
+    function switchTheme(next) {
+      localStorage.setItem('theme', next);
+      applyTheme(next);
+      yinyangAngle += next === 'dark' ? 360 : -360;
+      var icon = document.querySelector('#theme-toggle .icon-yinyang');
+      icon.style.setProperty('--angle', yinyangAngle + 'deg');
+    }
+
+    // The new theme spills out of the yin-yang in a growing circle until it
+    // covers the page. Browsers without view transitions, and anyone who
+    // prefers reduced motion, just get the instant switch.
+    function toggleTheme() {
+      var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!document.startViewTransition || reduceMotion) {
+        switchTheme(next);
+        return;
+      }
+
+      var box = document.getElementById('theme-toggle').getBoundingClientRect();
+      var x = box.left + box.width / 2;
+      var y = box.top + box.height / 2;
+      var radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+
+      document.startViewTransition(function () { switchTheme(next); }).ready.then(function () {
+        document.documentElement.animate(
+          { clipPath: ['circle(0px at ' + x + 'px ' + y + 'px)', 'circle(' + radius + 'px at ' + x + 'px ' + y + 'px)'] },
+          { duration: 500, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', pseudoElement: '::view-transition-new(root)' }
+        );
+      });
+    }
+
+    applyTheme(document.documentElement.getAttribute('data-theme'));
+
+    function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+      }
+      var field = document.createElement('textarea');
+      field.value = text;
+      field.style.position = 'fixed';
+      field.style.opacity = '0';
+      document.body.appendChild(field);
+      field.select();
+      document.execCommand('copy');
+      document.body.removeChild(field);
+      return Promise.resolve();
+    }
+
+    var toastTimer;
+
+    function copyEmail(event) {
+      event.preventDefault();
+      var address = 'conanc@princeton.edu';
+      var toast = document.getElementById('copy-toast');
+      function notify() {
+        toast.style.opacity = '1';
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toast.style.opacity = '0'; }, 2000);
+      }
+      copyText(address).then(notify, notify);
+    }
+
+    // Staggers the fade-in: numbers each piece in page order so the CSS can
+    // delay it, then starts them all at once.
+    if (document.documentElement.classList.contains('anim-hide')) {
+      var pieces = document.querySelectorAll('.header, .bio, .block, .rule, .updated, .webring, .term');
+      for (var i = 0; i < pieces.length; i++) pieces[i].style.setProperty('--i', Math.min(i, 12));
+      document.documentElement.classList.add('anim-play');
+      document.documentElement.classList.remove('anim-hide');
+    }
+  </script>
+</body>
+
+</html>
