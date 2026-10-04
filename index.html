@@ -210,7 +210,8 @@
   // Every finished turn is also logged to a history that a reset leaves alone,
   // and the stats below are worked out from it (plus the turn on the clock).
   // It all lives in this browser; Export and Import move it by hand, and once
-  // signed in, Friends (friends.js) copies the study turns up to compare. Any turn, the current one included,
+  // signed in, Friends (friends.js) copies the study turns up to compare and
+  // shows friends what the clock is doing. Any turn, the current one included,
   // can be renamed by clicking its underlined name and typing straight into it;
   // clearing the name puts the default back.
   (function () {
@@ -263,6 +264,18 @@
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
         localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
       } catch (e) {}
+      // Lets Friends upload new turns and show what the clock is doing
+      var laps = state.laps.map(function (t, i) { return { kind: t.kind, title: title(t, i), ms: t.ms, at: t.at }; });
+      window.studyNow = {
+        kind: state.current.kind,
+        title: title(state.current, state.laps.length),
+        at: state.current.at || null,
+        ms: state.current.ms,
+        since: state.since,
+        target: timed() ? target(state.current.kind) : null,
+        laps: laps
+      };
+      document.dispatchEvent(new CustomEvent('study:save', { detail: window.studyNow }));
     }
 
     function timed() {
@@ -461,11 +474,6 @@
       stats();
     }
 
-    // Lets Friends know there are turns to upload, once they're saved
-    function changed() {
-      setTimeout(function () { document.dispatchEvent(new CustomEvent('study:history')); });
-    }
-
     // Just what the stats need from a turn
     function record(turn) {
       return { kind: turn.kind, ms: turn.ms, at: turn.at };
@@ -589,7 +597,6 @@
           history = data.history.map(record);
           if (data.settings) settings = data.settings;
           save();
-          changed();
           render();
         } catch (e) {
           alert('That file isn\'t a study export.');
@@ -617,7 +624,6 @@
       state.current.ms = elapsed();
       state.laps.push(state.current);
       history.push(record(state.current));
-      changed();
       state.current = { kind: state.current.kind === 'study' ? 'brk' : 'study', ms: 0 };
       state.since = running ? Date.now() : null;
       if (running) state.current.at = state.since;
@@ -627,10 +633,7 @@
 
     function reset() {
       if (state.laps.length && !confirm('Clear the list? Your stats are kept.')) return;
-      if (elapsed()) {
-        history.push(record({ kind: state.current.kind, ms: elapsed(), at: state.current.at }));
-        changed();
-      }
+      if (elapsed()) history.push(record({ kind: state.current.kind, ms: elapsed(), at: state.current.at }));
       state = fresh();
       save();
       render();
@@ -686,6 +689,7 @@
       else if (e.key === 'Enter') { e.preventDefault(); lap(); }
     });
 
+    save();  // also tells Friends where the clock stands on arrival
     render();
     // Every frame while running, so the second hand sweeps instead of jumping
     (function frame() {

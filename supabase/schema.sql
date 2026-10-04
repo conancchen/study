@@ -21,6 +21,22 @@ create table if not exists sessions (
   unique (user_id, started_at)
 );
 
+-- What each person's timer is doing right now, written by their page as it
+-- changes: the turn on the clock (kind, title, ms banked before the last
+-- start, and since, when it last started, or null while paused), its length
+-- in timer mode, and the turns already finished on their list
+create table if not exists status (
+  user_id uuid primary key references profiles on delete cascade default auth.uid(),
+  kind text not null check (kind in ('study', 'brk')),
+  title text not null,
+  started_at timestamptz,
+  banked_ms integer not null default 0,
+  since timestamptz,
+  target_ms integer,
+  laps jsonb not null default '[]',
+  updated_at timestamptz not null default now()
+);
+
 -- A friendship is one row, from whoever asked to whoever was asked
 create table if not exists friendships (
   requester uuid not null references profiles on delete cascade,
@@ -43,6 +59,7 @@ $$;
 alter table profiles enable row level security;
 alter table sessions enable row level security;
 alter table friendships enable row level security;
+alter table status enable row level security;
 
 -- Profiles are visible to anyone signed in, so friends can be found by username
 drop policy if exists "profiles read" on profiles;
@@ -60,6 +77,16 @@ drop policy if exists "sessions insert own" on sessions;
 create policy "sessions insert own" on sessions for insert to authenticated with check (user_id = auth.uid());
 drop policy if exists "sessions delete own" on sessions;
 create policy "sessions delete own" on sessions for delete to authenticated using (user_id = auth.uid());
+
+-- Status: your own, plus your friends'; only you write yours
+drop policy if exists "status read" on status;
+create policy "status read" on status for select to authenticated
+  using (user_id = auth.uid() or are_friends(auth.uid(), user_id));
+drop policy if exists "status write" on status;
+create policy "status write" on status for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "status update" on status;
+create policy "status update" on status for update to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- Friendships: either side can see and remove one; only the asked side accepts
 drop policy if exists "friendships read" on friendships;
@@ -140,3 +167,12 @@ $$;
 
 grant execute on function accept_invite(text) to authenticated;
 grant execute on function leaderboard(text) to authenticated;
+
+-- Status changes are pushed to friends' pages as they happen
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'status') then
+    alter publication supabase_realtime add table status;
+  end if;
+end;
+$$;

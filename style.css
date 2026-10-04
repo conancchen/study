@@ -891,3 +891,46 @@ a:focus {
 .study-friends .row-year {
   font-variant-numeric: tabular-nums;
 }
+
+/* Under someone mid-turn: what it is and how long it has run, with a dot in
+   the turn's color that breathes while the clock is going */
+.board-now {
+  display: flex;
+  align-items: center;
+  margin: -2px 0 6px 1.4em;
+  color: var(--muted);
+  font-size: calc(12px * var(--base-scale, 1) * var(--text-scale, 1));
+  font-variant-numeric: tabular-nums;
+}
+
+.board-now::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--study);
+}
+
+.board-now-break::before {
+  background: var(--break);
+}
+
+.board-now-running::before {
+  animation: board-breathe 2s ease-in-out infinite;
+}
+
+@keyframes board-breathe {
+  50% { opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-now-running::before {
+    animation: none;
+  }
+}
+
+.board .row-note {
+  padding-left: 1.4em;
+}
