@@ -934,3 +934,17 @@ a:focus {
 .board .row-note {
   padding-left: 1.4em;
 }
+
+/* With room beside the timer, Friends moves out of the column into a sidebar
+   on its right, level with the clock, and stays put while the page scrolls */
+@media screen and (min-width: 1200px) {
+  .study-friends {
+    position: fixed;
+    top: 112px;
+    left: calc(50% + 284px + 24px);
+    width: 280px;
+    max-height: calc(100vh - 160px);
+    overflow-y: auto;
+    margin: 0;
+  }
+}

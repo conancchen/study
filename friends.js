@@ -9,8 +9,8 @@
 // or by username, which the other person then accepts.
 //
 // Without a Supabase project in config.js, Friends stays hidden, except on
-// localhost, where it runs as a preview: signing in shows a board of made-up
-// friends (with you on it, live from this timer) and nothing is sent anywhere.
+// localhost, where it runs as a preview: signing in shows the board with just
+// you on it, live from this timer, and nothing is sent anywhere.
 (function () {
   var config = window.STUDY_CONFIG || {};
   var section = document.getElementById('friends');
@@ -165,7 +165,7 @@
 
   async function refresh() {
     if (PREVIEW) {
-      rows = preview.rows.concat(myTotals());
+      rows = [myTotals()];
       renderBoard();
       return;
     }
@@ -350,35 +350,9 @@
     return row;
   }
 
-  // Made-up friends for the preview, mid-study, on break, paused and idle
-  var preview = (function () {
-    var now = Date.now();
-    var min = 60000;
-    var ago = function (m) { return new Date(now - m * min).toISOString(); };
-    var lap = function (kind, title, m, startedAgo) { return { kind: kind, title: title, ms: m * min, at: now - startedAgo * min }; };
-    var people = [
-      { id: 'maya', username: 'maya', display_name: 'Maya', today_ms: 142 * min, week_ms: 610 * min, all_ms: 5230 * min, streak: 9,
-        status: { kind: 'study', title: 'Linear algebra pset', banked_ms: 0, since: ago(23), target_ms: 50 * min,
-          laps: [lap('study', 'Reading: ch. 4', 50, 145), lap('brk', 'Break 1', 10, 95), lap('study', 'Session 2', 50, 85), lap('brk', 'Lunch', 12, 35)] } },
-      { id: 'sam', username: 'samk', display_name: 'Sam', today_ms: 95 * min, week_ms: 480 * min, all_ms: 3100 * min, streak: 4,
-        status: { kind: 'brk', title: 'Break 2', banked_ms: 0, since: ago(4), target_ms: 10 * min,
-          laps: [lap('study', 'Orgo flashcards', 45, 110), lap('brk', 'Break 1', 10, 65), lap('study', 'Problem set 3', 50, 54)] } },
-      { id: 'priya', username: 'priya_r', display_name: 'Priya', today_ms: 38 * min, week_ms: 720 * min, all_ms: 8800 * min, streak: 21,
-        status: { kind: 'study', title: 'Thesis draft', banked_ms: 38 * min, since: null, target_ms: null, laps: [] } },
-      { id: 'leo', username: 'leo', display_name: 'Leo', today_ms: 0, week_ms: 130 * min, all_ms: 940 * min, streak: 0 }
-    ];
-    var statuses = {};
-    people.forEach(function (p) {
-      if (p.status) statuses[p.id] = Object.assign({ user_id: p.id, updated_at: new Date(now).toISOString() }, p.status);
-      delete p.status;
-    });
-    return { rows: people, statuses: statuses };
-  })();
-
   async function signedIn(user) {
     if (PREVIEW) {
       me = { id: 'me', username: 'you', display_name: 'You', invite_code: 'preview' };
-      statuses = Object.assign({}, preview.statuses);
       signedOutEl.hidden = true;
       signedInEl.hidden = false;
       whoEl.textContent = '@you (preview)';
