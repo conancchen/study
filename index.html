@@ -169,6 +169,30 @@
   </p>
 </section>
 
+<section class="block study-friends" id="friends" hidden>
+  <h2 class="block-label block-label-plain">Friends</h2>
+  <div id="friends-signed-out" hidden>
+    <p class="study-chart-caption">Sign in to compare your study time with friends.</p>
+    <p class="study-backup"><button class="study-backup-option" id="sign-in" type="button">Sign in with Google</button></p>
+  </div>
+  <div id="friends-signed-in" hidden>
+    <p class="study-backup board-sort" id="board-sort">
+      <button class="study-backup-option" data-sort="today" type="button">Today</button>
+      · <button class="study-backup-option" data-sort="week" type="button">This week</button>
+      · <button class="study-backup-option" data-sort="all" type="button">All time</button>
+      · <button class="study-backup-option" data-sort="streak" type="button">Streak</button>
+    </p>
+    <ol class="board" id="board"></ol>
+    <ul class="board" id="requests"></ul>
+    <p class="study-backup">
+      <button class="study-backup-option" id="invite" type="button">Copy invite link</button>
+      · <button class="study-backup-option" id="add-friend" type="button">Add by username</button>
+      · <button class="study-backup-option" id="rename" type="button" title="Change your username"><span id="friends-who"></span></button>
+      · <button class="study-backup-option" id="sign-out" type="button">Sign out</button>
+    </p>
+  </div>
+</section>
+
 <script>
   // A stopwatch that runs in turns: a study session, then a break, then the
   // next session, and so on. The lap button closes the current turn and starts
@@ -185,7 +209,8 @@
   //
   // Every finished turn is also logged to a history that a reset leaves alone,
   // and the stats below are worked out from it (plus the turn on the clock).
-  // It all lives in this browser only; Export and Import move it by hand. Any turn, the current one included,
+  // It all lives in this browser; Export and Import move it by hand, and once
+  // signed in, Friends (friends.js) copies the study turns up to compare. Any turn, the current one included,
   // can be renamed by clicking its underlined name and typing straight into it;
   // clearing the name puts the default back.
   (function () {
@@ -436,6 +461,11 @@
       stats();
     }
 
+    // Lets Friends know there are turns to upload, once they're saved
+    function changed() {
+      setTimeout(function () { document.dispatchEvent(new CustomEvent('study:history')); });
+    }
+
     // Just what the stats need from a turn
     function record(turn) {
       return { kind: turn.kind, ms: turn.ms, at: turn.at };
@@ -559,6 +589,7 @@
           history = data.history.map(record);
           if (data.settings) settings = data.settings;
           save();
+          changed();
           render();
         } catch (e) {
           alert('That file isn\'t a study export.');
@@ -586,6 +617,7 @@
       state.current.ms = elapsed();
       state.laps.push(state.current);
       history.push(record(state.current));
+      changed();
       state.current = { kind: state.current.kind === 'study' ? 'brk' : 'study', ms: 0 };
       state.since = running ? Date.now() : null;
       if (running) state.current.at = state.since;
@@ -595,7 +627,10 @@
 
     function reset() {
       if (state.laps.length && !confirm('Clear the list? Your stats are kept.')) return;
-      if (elapsed()) history.push(record({ kind: state.current.kind, ms: elapsed(), at: state.current.at }));
+      if (elapsed()) {
+        history.push(record({ kind: state.current.kind, ms: elapsed(), at: state.current.at }));
+        changed();
+      }
       state = fresh();
       save();
       render();
@@ -753,6 +788,9 @@
       document.documentElement.classList.remove('anim-hide');
     }
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./config.js"></script>
+  <script src="./friends.js"></script>
 </body>
 
 </html>

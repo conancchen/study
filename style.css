@@ -854,3 +854,40 @@ a:focus {
 }
 
 /*# sourceMappingURL=style.css.map */
+/* Friends: a leaderboard of you and your friends, ranked by the chosen total */
+.board {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.board-sort {
+  margin: 0 0 8px;
+}
+
+.board-sort .active {
+  color: var(--text);
+}
+
+.board-rank {
+  display: inline-block;
+  min-width: 1.4em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.board-avatar {
+  width: 1.1em;
+  height: 1.1em;
+  border-radius: 50%;
+  margin-right: 0.4em;
+  vertical-align: -0.15em;
+}
+
+.board-me {
+  font-weight: 500;
+}
+
+.study-friends .row-year {
+  font-variant-numeric: tabular-nums;
+}
