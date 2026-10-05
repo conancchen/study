@@ -1337,3 +1337,95 @@ p.study-time {
 .board-stats {
   padding-bottom: 10px;
 }
+
+/* Friend requests: one card each, above the board, with buttons big enough
+   to tap; requests you've sent wait under them in plain text */
+.requests:not(:empty) {
+  margin: 0 0 12px;
+}
+
+.request {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin: 0 0 8px;
+  background: var(--chip-bg);
+  border-radius: 9px;
+}
+
+.request .request-avatar {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  flex: none;
+}
+
+.request-who {
+  flex: 1;
+  min-width: 0;
+}
+
+.request-name,
+.request-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.request-name {
+  font-weight: 500;
+}
+
+.request-sub {
+  color: var(--muted);
+  font-size: calc(12px * var(--base-scale, 1) * var(--text-scale, 1));
+}
+
+.request-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+.request-button {
+  min-height: 36px;
+  padding: 6px 14px;
+  background: var(--bg);
+}
+
+.request-accept {
+  color: var(--bg);
+  background: var(--text);
+}
+
+.request-accept:hover:not(:disabled) {
+  background: var(--text);
+  opacity: 0.85;
+}
+
+.request-sent {
+  color: var(--muted);
+  font-size: calc(12px * var(--base-scale, 1) * var(--text-scale, 1));
+}
+
+.invite-note {
+  margin: 0;
+}
+
+.invite-link {
+  margin-top: 8px;
+}
+
+@media screen and (max-width: 480px) {
+  .request {
+    flex-wrap: wrap;
+  }
+  .request-actions {
+    width: 100%;
+  }
+  .request-button {
+    flex: 1;
+    min-height: 40px;
+  }
+}

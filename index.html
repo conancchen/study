@@ -169,9 +169,11 @@
 <section class="block study-friends" id="friends" hidden>
   <h2 class="block-label block-label-plain"><button class="block-toggle" type="button" aria-expanded="true">Friends</button></h2>
   <div id="friends-signed-out" hidden>
+    <p class="invite-note" id="invite-note" hidden>You've been invited to be friends. Sign in to accept.</p>
     <p class="study-backup"><button class="study-backup-option" id="sign-in" type="button">Sign in with Google</button></p>
   </div>
   <div id="friends-signed-in" hidden>
+    <ul class="board requests" id="requests"></ul>
     <p class="study-backup board-sort" id="board-sort">
       <button class="study-backup-option" data-sort="today" type="button">Today</button>
       · <button class="study-backup-option" data-sort="week" type="button">This week</button>
@@ -179,7 +181,6 @@
       · <button class="study-backup-option" data-sort="streak" type="button">Streak</button>
     </p>
     <ol class="board" id="board"></ol>
-    <ul class="board" id="requests"></ul>
     <p class="study-backup">
       <button class="study-backup-option" id="invite" type="button">Copy invite link</button>
       · <button class="study-backup-option" id="add-friend" type="button">Add by username</button>

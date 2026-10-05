@@ -182,11 +182,18 @@ $$;
 grant execute on function accept_invite(text) to authenticated;
 grant execute on function leaderboard(text) to authenticated;
 
--- Status changes are pushed to friends' pages as they happen
+-- Status, finished turns and friend requests are pushed to friends' pages as
+-- they happen, so the board and requests update live
 do $$
 begin
   if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'status') then
     alter publication supabase_realtime add table status;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'sessions') then
+    alter publication supabase_realtime add table sessions;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'friendships') then
+    alter publication supabase_realtime add table friendships;
   end if;
 end;
 $$;

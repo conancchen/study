@@ -52,13 +52,19 @@
   var accountEl = document.getElementById('settings-account');
   var accountOutEl = document.getElementById('settings-signed-out');
   var signOutEl = document.getElementById('settings-sign-out');
+  var inviteNoteEl = document.getElementById('invite-note');
 
   // An invite link is kept until it can be used, through the Google sign-in
   // and its redirect if need be
   var params = new URLSearchParams(location.search);
   if (params.get('invite')) {
     try { localStorage.setItem(INVITE_KEY, params.get('invite')); } catch (e) {}
-    history.replaceState(null, '', location.pathname);
+    params.delete('invite');
+    var rest = params.toString();
+    history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+  }
+  function pendingInvite() {
+    try { return localStorage.getItem(INVITE_KEY); } catch (e) { return null; }
   }
 
   function duration(ms) {
@@ -77,6 +83,20 @@
   // A status worth showing: a turn under way, and touched recently
   function active(st) {
     return st && (st.since || st.banked_ms > 0) && Date.now() - Date.parse(st.updated_at) < STALE;
+  }
+
+  // The study turn someone has on the clock right now, which the database
+  // only counts once it's finished
+  function running(id) {
+    var st = statuses[id];
+    if (!active(st) || st.kind !== 'study') return 0;
+    return st.banked_ms + (st.since ? Math.max(0, Date.now() - Date.parse(st.since)) : 0);
+  }
+
+  // A total with the running turn in it, so the board counts up live
+  function live(row, key) {
+    var value = row[SORTS[key].field];
+    return key === 'streak' ? value : value + running(row.id);
   }
 
   function show(value, key) {
@@ -186,11 +206,14 @@
     saveTimer = setTimeout(function () { pushStatus(); sync(); }, 800);
   }
 
+  // The invite is only let go once the database has answered for it, so a
+  // dropped connection doesn't lose it
   async function useInvite() {
-    var code;
-    try { code = localStorage.getItem(INVITE_KEY); localStorage.removeItem(INVITE_KEY); } catch (e) {}
+    var code = pendingInvite();
     if (!code) return;
     var res = await db.rpc('accept_invite', { code: code });
+    if (res.error && !res.error.code) { console.error(res.error); return; }  // never reached the database
+    try { localStorage.removeItem(INVITE_KEY); } catch (e) {}
     if (res.error) toast(res.error.message);
     else if (res.data !== me.display_name) toast('You and ' + res.data + ' are now friends');
   }
@@ -213,15 +236,18 @@
     renderBoard();
     document.dispatchEvent(new CustomEvent('study:friends'));
 
+    // Requests both ways: ones to answer, and ones still waiting on someone
     var pending = await db.from('friendships')
-      .select('requester, profiles!friendships_requester_fkey(username, display_name)')
-      .eq('addressee', me.id).eq('accepted', false);
+      .select('requester, addressee,'
+        + ' sender:profiles!friendships_requester_fkey(username, display_name, avatar_url),'
+        + ' receiver:profiles!friendships_addressee_fkey(username, display_name, avatar_url)')
+      .eq('accepted', false);
+    if (pending.error) console.error(pending.error);
     renderRequests(pending.error ? [] : pending.data);
   }
 
   function renderBoard() {
-    var field = SORTS[sort].field;
-    var sorted = rows.slice().sort(function (a, b) { return b[field] - a[field] || a.display_name.localeCompare(b.display_name); });
+    var sorted = rows.slice().sort(function (a, b) { return live(b, sort) - live(a, sort) || a.display_name.localeCompare(b.display_name); });
     boardEl.innerHTML = '';
     sorted.forEach(function (row, i) {
       var li = document.createElement('li');
@@ -250,8 +276,9 @@
       name.appendChild(document.createTextNode(row.id === me.id ? 'You' : row.display_name));
       name.title = '@' + row.username;
       var value = document.createElement('span');
-      value.className = 'row-year';
-      value.textContent = show(row[field], sort);
+      value.className = 'row-year board-total';
+      value.dataset.user = row.id;
+      value.dataset.sort = sort;
       line.appendChild(name);
       line.appendChild(value);
       summary.appendChild(line);
@@ -277,10 +304,17 @@
   }
 
   // The line under each person: whether they're studying, and where
+  // and every total, with any turn still running counted in
   function tickBoard() {
     boardEl.querySelectorAll('.board-now').forEach(function (el) {
       var st = statuses[el.dataset.user];
       el.textContent = active(st) ? window.studySocial.describe(st) : 'On break';
+    });
+    var byId = {};
+    rows.forEach(function (row) { byId[row.id] = row; });
+    boardEl.querySelectorAll('.board-total').forEach(function (el) {
+      var row = byId[el.dataset.user];
+      if (row) el.textContent = show(live(row, el.dataset.sort), el.dataset.sort);
     });
   }
 
@@ -294,8 +328,9 @@
       var label = document.createElement('span');
       label.textContent = SORTS[key].label;
       var value = document.createElement('span');
-      value.className = 'row-year';
-      value.textContent = show(row[SORTS[key].field], key);
+      value.className = 'row-year board-total';
+      value.dataset.user = row.id;
+      value.dataset.sort = key;
       line.appendChild(label);
       line.appendChild(value);
       note.appendChild(line);
@@ -341,33 +376,75 @@
     return note;
   }
 
+  function avatar(who) {
+    var img = document.createElement('img');
+    img.className = 'board-avatar';
+    img.src = who.avatar_url;
+    img.alt = '';
+    img.referrerPolicy = 'no-referrer';
+    return img;
+  }
+
+  // Requests to you come first, each a card with buttons big enough to hit
+  // on a phone; ones you've sent sit under them until they're answered
   function renderRequests(pending) {
     requestsEl.innerHTML = '';
-    pending.forEach(function (req) {
-      var who = req.profiles || {};
+    var incoming = pending.filter(function (req) { return req.addressee === me.id; });
+    var outgoing = pending.filter(function (req) { return req.requester === me.id; });
+    incoming.forEach(function (req) {
+      var who = req.sender || {};
       var li = document.createElement('li');
-      li.className = 'row';
-      var name = document.createElement('span');
-      name.textContent = (who.display_name || 'Someone') + ' wants to be friends';
-      var actions = document.createElement('span');
-      actions.className = 'study-backup';
-      [['Accept', true], ['Ignore', false]].forEach(function (pair, n) {
-        if (n) actions.appendChild(document.createTextNode(' · '));
+      li.className = 'request';
+      if (who.avatar_url) li.appendChild(avatar(who)).classList.add('request-avatar');
+      var text = document.createElement('div');
+      text.className = 'request-who';
+      var name = document.createElement('div');
+      name.className = 'request-name';
+      name.textContent = who.display_name || 'Someone';
+      var sub = document.createElement('div');
+      sub.className = 'request-sub';
+      sub.textContent = (who.username ? '@' + who.username + ' · ' : '') + 'wants to be friends';
+      text.appendChild(name);
+      text.appendChild(sub);
+      var actions = document.createElement('div');
+      actions.className = 'request-actions';
+      [['Accept', true], ['Decline', false]].forEach(function (pair) {
         var btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'study-backup-option';
+        btn.className = 'study-button request-button' + (pair[1] ? ' request-accept' : '');
         btn.textContent = pair[0];
         btn.onclick = async function () {
+          actions.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
           var q = db.from('friendships');
           q = pair[1] ? q.update({ accepted: true }) : q.delete();
           var res = await q.eq('requester', req.requester).eq('addressee', me.id);
           if (res.error) toast(res.error.message);
+          else if (pair[1]) toast('You and ' + (who.display_name || 'them') + ' are now friends');
           refresh();
         };
         actions.appendChild(btn);
       });
-      li.appendChild(name);
+      li.appendChild(text);
       li.appendChild(actions);
+      requestsEl.appendChild(li);
+    });
+    outgoing.forEach(function (req) {
+      var who = req.receiver || {};
+      var li = document.createElement('li');
+      li.className = 'row request-sent';
+      var name = document.createElement('span');
+      name.textContent = 'Waiting on ' + (who.display_name || 'them') + (who.username ? ' (@' + who.username + ')' : '');
+      var cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'study-backup-option';
+      cancel.textContent = 'Cancel';
+      cancel.onclick = async function () {
+        var res = await db.from('friendships').delete().eq('requester', me.id).eq('addressee', req.addressee);
+        if (res.error) toast(res.error.message);
+        refresh();
+      };
+      li.appendChild(name);
+      li.appendChild(cancel);
       requestsEl.appendChild(li);
     });
   }
@@ -396,7 +473,15 @@
     return row;
   }
 
-  async function signedIn(user) {
+  // getSession and the SIGNED_IN event both arrive after a Google redirect;
+  // only the first goes through, so a new profile isn't made twice
+  var signingIn = null;
+  function signedIn(user) {
+    if (!signingIn) signingIn = signIn(user).finally(function () { signingIn = null; });
+    return signingIn;
+  }
+
+  async function signIn(user) {
     if (PREVIEW) {
       me = { id: 'me', username: 'you', display_name: 'You', invite_code: 'preview' };
       signedOutEl.hidden = true;
@@ -434,9 +519,20 @@
   // Friends' statuses arrive the moment they change; the database only sends
   // the rows this person is allowed to read
   var channel = null;
+  var refreshTimer;
+  function soon() {  // turns arrive in batches, so one refresh covers them
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(refresh, 1000);
+  }
   function listen() {
     if (channel) return;
     channel = db.channel('status')
+      // A request made, answered or taken back, by either side
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, function () {
+        refresh();
+      })
+      // A friend's finished turn landing moves their totals
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sessions' }, soon)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'status' }, function (change) {
         var row = change.new;
         if (!row || !row.user_id) return;
@@ -454,6 +550,7 @@
     document.dispatchEvent(new CustomEvent('study:signed-out'));
     signedOutEl.hidden = false;
     signedInEl.hidden = true;
+    inviteNoteEl.hidden = !pendingInvite();
     accountEl.hidden = true;
     accountOutEl.hidden = false;
     signOutEl.hidden = true;
@@ -484,9 +581,23 @@
     signedOut();
   });
 
+  // Copies the link, and if the browser won't allow that, puts it on the
+  // page to copy by hand
   document.getElementById('invite').addEventListener('click', function () {
     var link = location.origin + location.pathname + '?invite=' + me.invite_code;
-    copyText(link).then(function () { toast('Invite link copied'); });
+    var shown = this.parentNode.nextElementSibling;
+    if (shown && shown.classList.contains('invite-link')) shown.remove();
+    copyText(link).then(function () { toast('Invite link copied'); }, function () {
+      var field = document.createElement('input');
+      field.className = 'music-link invite-link';
+      field.readOnly = true;
+      field.value = link;
+      field.setAttribute('aria-label', 'Invite link');
+      field.onfocus = function () { field.select(); };
+      document.getElementById('invite').parentNode.after(field);
+      field.focus();
+      toast('Copy the link below');
+    });
   });
 
   document.getElementById('add-friend').addEventListener('click', function () {
@@ -494,10 +605,26 @@
       name = name.replace(/^@/, '').toLowerCase();
       var found = await db.from('profiles').select('id, display_name').eq('username', name).maybeSingle();
       if (!found.data) { toast('No one goes by @' + name); return; }
-      var res = await db.from('friendships').insert({ requester: me.id, addressee: found.data.id });
-      if (res.error && res.error.code === '23505') toast('You\'ve already asked ' + found.data.display_name);
+      var them = found.data;
+      if (them.id === me.id) { toast('That\'s you'); return; }
+      // If they've already asked you, asking back accepts theirs
+      var theirs = await db.from('friendships').select('accepted')
+        .eq('requester', them.id).eq('addressee', me.id).maybeSingle();
+      if (theirs.data && theirs.data.accepted) { toast('You and ' + them.display_name + ' are already friends'); return; }
+      if (theirs.data) {
+        var ok = await db.from('friendships').update({ accepted: true }).eq('requester', them.id).eq('addressee', me.id);
+        toast(ok.error ? ok.error.message : 'You and ' + them.display_name + ' are now friends');
+        refresh();
+        return;
+      }
+      var res = await db.from('friendships').insert({ requester: me.id, addressee: them.id });
+      if (res.error && res.error.code === '23505') {
+        var mine = await db.from('friendships').select('accepted').eq('requester', me.id).eq('addressee', them.id).maybeSingle();
+        toast(mine.data && mine.data.accepted ? 'You and ' + them.display_name + ' are already friends' : 'You\'ve already asked ' + them.display_name);
+      }
       else if (res.error) toast(res.error.message);
-      else toast('Request sent to ' + found.data.display_name);
+      else toast('Request sent to ' + them.display_name);
+      refresh();
     });
   });
 
