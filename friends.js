@@ -159,27 +159,14 @@
       since: now.since ? new Date(now.since).toISOString() : null,
       target_ms: now.target,
       laps: now.laps.slice(-50),
-      place: now.place,
       updated_at: new Date().toISOString()
     };
     if (!PREVIEW) {
       var res = await db.from('status').upsert(row);
-      // Until the place column is added (supabase/schema.sql), the rest still goes up
-      if (res.error && res.error.code === 'PGRST204') {
-        var rest = Object.assign({}, row);
-        delete rest.place;
-        res = await db.from('status').upsert(rest);
-      }
       if (res.error) { console.error(res.error); return; }
     }
     statuses[me.id] = row;
-    announce(row);
     if (rows.length) renderBoard();
-  }
-
-  // The map (map.js) shares this sign-in and these statuses
-  function announce(row) {
-    document.dispatchEvent(new CustomEvent('study:status', { detail: row }));
   }
 
   window.studySocial = {
@@ -190,10 +177,9 @@
     friends: function () { return rows; },  // you included, as on the board
     pushStatus: pushStatus,
     signIn: function () { document.getElementById('sign-in').click(); },
-    // What someone's doing and where, e.g. "Studying · Firestone Library"
+    // What someone's doing, e.g. "Studying"
     describe: function (st) {
-      var verb = !st.since ? 'Paused' : st.kind === 'brk' ? 'On break' : 'Studying';
-      return verb + (st.place ? ' · ' + st.place : '');
+      return !st.since ? 'Paused' : st.kind === 'brk' ? 'On break' : 'Studying';
     },
     active: active
   };
@@ -231,7 +217,6 @@
     if (!st.error) {
       statuses = {};
       st.data.forEach(function (row) { statuses[row.user_id] = row; });
-      announce(null);
     }
     renderBoard();
     document.dispatchEvent(new CustomEvent('study:friends'));
@@ -358,11 +343,10 @@
       name.className = 'study-name';
       name.textContent = lap.title;
       label.appendChild(name);
-      if (lap.at || lap.place) {
+      if (lap.at) {
         var at = document.createElement('span');
         at.className = 'study-at';
-        at.textContent = (lap.at ? ' · ' + new Date(lap.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '')
-          + (lap.place ? ' · ' + lap.place : '');
+        at.textContent = ' · ' + new Date(lap.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
         label.appendChild(at);
       }
       var time = document.createElement('span');
@@ -537,7 +521,6 @@
         var row = change.new;
         if (!row || !row.user_id) return;
         statuses[row.user_id] = row;
-        announce(row);
         if (rows.some(function (r) { return r.id === row.user_id; })) renderBoard();
         else refresh();  // someone new, like a friend just added
       })

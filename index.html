@@ -114,8 +114,9 @@
     </script>
 
     <section class="block study">
-  <p class="study-heading"><span class="study-phase" id="phase">Session 1</span><span class="study-at"> – </span><input class="study-place" id="place" type="text" maxlength="40" placeholder="where?" aria-label="Where you're studying" autocomplete="off" spellcheck="false"></p>
-  <p class="study-time"><span id="time">0:00</span><span class="study-now" id="clock-now"></span></p>
+  <p class="study-heading"><span class="study-phase" id="phase">Session 1</span></p>
+  <p class="study-time"><span id="time">0:00</span></p>
+  <p class="study-now" id="clock-now"></p>
   <div class="study-clock">
     <svg class="study-dial" id="dial" viewBox="0 0 200 200" aria-hidden="true">
       <circle class="study-dial-face" cx="100" cy="100" r="92"></circle>
@@ -163,6 +164,17 @@
   <div class="study-chart" id="chart" role="img"></div>
   <p class="study-chart-caption" id="chart-caption"></p>
 </section>
+
+<section class="block study-ambient" id="ambient">
+  <h2 class="block-label block-label-plain ambient-label"><button class="block-toggle" type="button" aria-expanded="true">Ambient</button><button class="icon-button ambient-mute" id="ambient-mute" type="button" aria-pressed="false" aria-label="Mute" title="Mute">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="2" width="6" height="12" rx="3"></rect>
+      <path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4M8 22h8"></path>
+      <path class="ambient-mute-off" d="M3 3l18 18"></path>
+    </svg>
+  </button></h2>
+  <div id="ambient-sounds"></div>
+</section>
 </div>
 
 <div class="study-side">
@@ -187,11 +199,6 @@
     </p>
   </div>
 </section>
-
-<section class="block study-map" id="map" hidden>
-  <h2 class="block-label block-label-plain"><button class="block-toggle" type="button" aria-expanded="true">Map</button></h2>
-  <div class="friends-map" id="friends-map"></div>
-</section>
 </div>
 
   <dialog class="settings" id="settings" aria-label="Settings">
@@ -203,7 +210,6 @@
         <div class="row"><span>Username</span><span class="study-lengths">@<input class="study-length settings-field" id="username" type="text" maxlength="20" autocomplete="off" spellcheck="false" aria-label="Username"></span></div>
       </div>
     </div>
-    <div class="row"><span>Default location</span><input class="study-length settings-field" id="home-place" type="text" maxlength="40" placeholder="none" autocomplete="off" spellcheck="false" aria-label="Default location"></div>
 
     <p class="study-backup">
       <button class="study-backup-option" id="export" type="button">Export stats</button>
@@ -216,7 +222,6 @@
     <p class="settings-done"><button class="study-button" id="settings-done" type="button">Done</button></p>
   </dialog>
 
-<script src="./places.js"></script>
 <script>
   // A stopwatch that runs in turns: a study session, then a break, then the
   // next session, and so on. The lap button closes the current turn and starts
@@ -237,9 +242,7 @@
   // signed in, Friends (friends.js) copies the study turns up to compare and
   // shows friends what the clock is doing. Any turn, the current one included,
   // can be renamed by clicking its underlined name and typing straight into it;
-  // clearing the name puts the default back. Under the name is where you're
-  // studying: it goes on the turn on the clock and every turn after, until
-  // it's changed, and Friends shows it (and pins it on the map).
+  // clearing the name puts the default back.
   (function () {
     var KEY = 'study-timer';
     // Kept apart so a reset leaves it be; renamed once so older saved lengths
@@ -255,9 +258,7 @@
     // since: when the clock last started, or null while paused
     var state = load(KEY) || fresh();
 
-    // mode: 'stopwatch' or 'timer'; minutes: each kind's length in timer mode;
-    // place: where you're studying now, if you've said; home: the default
-    // location, set in settings, that a fresh list starts at
+    // mode: 'stopwatch' or 'timer'; minutes: each kind's length in timer mode
     var settings = load(SETTINGS_KEY) || { mode: 'stopwatch', minutes: { study: 50, brk: 10 } };
 
     // history: every finished turn ever, oldest first, as { kind, ms, at }.
@@ -277,19 +278,14 @@
     var modeButtons = { stopwatch: document.getElementById('mode-stopwatch'), timer: document.getElementById('mode-timer') };
     var timerSettingsEl = document.getElementById('timer-settings');
     var lengthInputs = { study: document.getElementById('length-study'), brk: document.getElementById('length-brk') };
-    var placeInput = document.getElementById('place');
-    var homeInput = document.getElementById('home-place');
 
     function fresh() {
       return { laps: [], current: next('study'), since: null };
     }
 
-    // A new turn, at wherever you last said you were
     function next(kind, at) {
       var turn = { kind: kind, ms: 0 };
       if (at) turn.at = at;
-      var place = settings && (settings.place || settings.home);
-      if (place) turn.place = place;
       return turn;
     }
 
@@ -304,7 +300,7 @@
         localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
       } catch (e) {}
       // Lets Friends upload new turns and show what the clock is doing
-      var laps = state.laps.map(function (t, i) { return { kind: t.kind, title: title(t, i), ms: t.ms, at: t.at, place: t.place }; });
+      var laps = state.laps.map(function (t, i) { return { kind: t.kind, title: title(t, i), ms: t.ms, at: t.at }; });
       window.studyNow = {
         kind: state.current.kind,
         title: title(state.current, state.laps.length),
@@ -312,7 +308,6 @@
         ms: state.current.ms,
         since: state.since,
         target: timed() ? target(state.current.kind) : null,
-        place: state.current.place || settings.place || null,
         laps: laps
       };
       document.dispatchEvent(new CustomEvent('study:save', { detail: window.studyNow }));
@@ -444,12 +439,11 @@
       render();
     }
 
-    // " – 1:23 PM · Firestone Library" after a name, for when and where the
-    // turn started
+    // " – 1:23 PM" after a name, for when the turn started
     function startedAt(turn) {
-      return (turn.at
+      return turn.at
         ? ' – ' + new Date(turn.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-        : '') + (turn.place ? ' · ' + turn.place : '');
+        : '';
     }
 
     function tick() {
@@ -488,9 +482,6 @@
       for (var k in lengthInputs) {
         if (document.activeElement !== lengthInputs[k]) lengthInputs[k].value = settings.minutes[k];
       }
-      if (document.activeElement !== placeInput) placeInput.value = state.current.place || '';
-      if (document.activeElement !== homeInput) homeInput.value = settings.home || '';
-      fitPlace();
 
       lapsEl.innerHTML = '';
       for (var i = state.laps.length - 1; i >= 0; i--) {
@@ -520,9 +511,7 @@
 
     // Just what the stats need from a turn
     function record(turn) {
-      var r = { kind: turn.kind, ms: turn.ms, at: turn.at };
-      if (turn.place) r.place = turn.place;
-      return r;
+      return { kind: turn.kind, ms: turn.ms, at: turn.at };
     }
 
     // "2h 05m", "35m", or "40s" under a minute
@@ -680,7 +669,6 @@
     function reset() {
       if (state.laps.length && !confirmClick(resetBtn, 'Clear list?')) return;
       if (elapsed()) history.push(record({ kind: state.current.kind, ms: elapsed(), at: state.current.at }));
-      delete settings.place;  // a fresh list starts back at the default location
       state = fresh();
       save();
       render();
@@ -713,66 +701,6 @@
         render();
         advance();  // a turn already past its length ends right away
       });
-    });
-
-    // The place sits in the heading's line, as wide as what's in it
-    var measure = document.createElement('canvas').getContext('2d');
-    function fitPlace() {
-      measure.font = getComputedStyle(placeInput).font;
-      placeInput.style.width = Math.ceil(measure.measureText(placeInput.value || placeInput.placeholder).width) + 2 + 'px';
-    }
-
-    // Typing the start of a known place fills in the rest, selected, so
-    // carrying on typing replaces it, Backspace drops it, and Enter or Tab
-    // keeps it. Anything else typed stays exactly as typed.
-    function completes(input, after) {
-      input.addEventListener('input', function (e) {
-        var typed = input.value;
-        if (e.inputType && e.inputType.indexOf('insert') === 0 && typed.trim() && input.selectionEnd === typed.length) {
-          var lower = typed.toLowerCase();
-          var match = window.STUDY_PLACE_ORDER.filter(function (name) { return name.toLowerCase().indexOf(lower) === 0; })[0];
-          if (match && match.length > typed.length) {
-            input.value = typed + match.slice(typed.length);
-            input.setSelectionRange(typed.length, match.length);
-          }
-        }
-        if (after) after();
-      });
-      input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') input.blur();
-        else if (e.key === 'Tab' && input.selectionStart !== input.selectionEnd) {
-          e.preventDefault();
-          input.setSelectionRange(input.value.length, input.value.length);
-        }
-      });
-    }
-    completes(placeInput, fitPlace);
-    completes(homeInput);
-
-    // A known place takes its listed spelling, so the map can find it
-    function tidyPlace(text) {
-      var place = text.replace(/\s+/g, ' ').trim().slice(0, 40);
-      Object.keys(window.STUDY_PLACES).forEach(function (name) {
-        if (name.toLowerCase() === place.toLowerCase()) place = name;
-      });
-      return place;
-    }
-
-    placeInput.addEventListener('change', function () {
-      var place = tidyPlace(placeInput.value);
-      if (place) { settings.place = place; state.current.place = place; }
-      else { delete settings.place; delete state.current.place; }
-      save();
-      render();
-    });
-
-    // A new default also goes on the turn on the clock, if it has no place yet
-    homeInput.addEventListener('change', function () {
-      var home = tidyPlace(homeInput.value);
-      if (home) settings.home = home; else delete settings.home;
-      if (home && !state.current.place) state.current.place = home;
-      save();
-      render();
     });
 
     Object.keys(lengthInputs).forEach(function (kind) {
@@ -861,11 +789,11 @@
 
     applyTheme(document.documentElement.getAttribute('data-theme'));
 
-    // The time of day, beside the timer's readout, kept to the minute
+    // The time of day, under the timer's readout, kept to the minute
     (function () {
       var el = document.getElementById('clock-now');
       function show() {
-        el.textContent = ' · ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        el.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       }
       show();
       setInterval(show, 1000);
@@ -944,7 +872,7 @@
       input.onblur = function () { if (!input.value.trim()) form.remove(); };
     }
 
-    // Stats, Friends and Map fold away to just their heading with a
+    // Stats, Ambient and Friends fold away to just their heading with a
     // click on it, and stay that way on the next visit
     (function () {
       var KEY = 'study-collapsed';
@@ -997,11 +925,10 @@
       document.documentElement.classList.remove('anim-hide');
     }
   </script>
+  <script src="./ambient.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
   <script src="./friends.js"></script>
-  <!-- Map hidden until the place column is in the live database (supabase/schema.sql) -->
-  <!-- <script src="./map.js"></script> -->
 </body>
 
 </html>
