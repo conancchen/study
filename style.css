@@ -262,49 +262,6 @@ a:focus {
   font-weight: 400;
 }
 
-/* A section's heading folds it away; the arrow turns to show which way */
-.block-toggle {
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
-
-.block-toggle:hover {
-  color: var(--text);
-}
-
-.block-toggle::after {
-  content: "";
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  margin: 0 0 3px 8px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg);
-  transition: transform 0.15s ease;
-}
-
-.collapsed .block-toggle::after {
-  transform: rotate(-45deg);
-  margin-bottom: 1px;
-}
-
-.block-toggle:focus:not(:focus-visible) {
-  outline: none;
-}
-
-.block.collapsed > :not(.block-label) {
-  display: none !important;
-}
-
-.block.collapsed > .block-label {
-  margin-bottom: 0;
-}
-
 .row {
   display: flex;
   align-items: baseline;
@@ -1107,26 +1064,96 @@ p.study-now {
   padding-left: 1.4em;
 }
 
-/* With room beside the timer, the other sections move out of the column into
-   sidebars level with the clock that stay put while the page scrolls: Friends
-   on the right, Stats on the left */
+/* Stats and Ambient on the left, Friends on the right, in sidebars along
+   the edges of the screen. Each slides off to its edge when shut, leaving
+   just its handle. With room beside the clock they sit open next to it;
+   on a narrower screen they float over the page instead. */
+.study-side {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  width: min(328px, calc(100vw - 56px));
+  background: var(--bg);
+  border-right: 1px solid var(--rule);
+  box-shadow: 0 0 32px rgba(0, 0, 0, 0.12);
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s;
+}
+
+.study-side-right {
+  left: auto;
+  right: 0;
+  border-right: none;
+  border-left: 1px solid var(--rule);
+}
+
+.study-side.collapsed {
+  transform: translateX(-100%);
+  visibility: hidden;
+  box-shadow: none;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s 0.3s;
+}
+
+.study-side-right.collapsed {
+  transform: translateX(100%);
+}
+
+/* Friends only shows once friends.js has something to put in it */
+.study-side-right:has(.study-friends[hidden]) {
+  display: none;
+}
+
+.study-side-inner {
+  height: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 24px 32px;
+}
+
+.study-side-inner > .block:first-child,
+.study-side-inner > [hidden] + .block {
+  margin-top: 0;
+}
+
+/* The three bars that open and shut the sidebars, at the top left of the
+   middle column; lit while they're open */
+#side-toggle {
+  margin-left: -5.5px;
+}
+
+#side-toggle.active {
+  color: var(--text);
+}
+
+/* On a narrow screen Friends moves into the left sidebar */
+@media screen and (max-width: 1199px) {
+  .study-side-right {
+    display: none;
+  }
+}
+
 @media screen and (min-width: 1200px) {
   .study-side {
-    position: fixed;
-    top: 112px;
-    left: calc(50% + 284px + 24px);
-    width: 280px;
-    max-height: calc(100vh - 160px);
-    overflow-y: auto;
-    margin: 0;
+    width: calc(50% - 284px - 24px);
+    box-shadow: none;
+    border: none;
+    background: transparent;
   }
-  .study-side-left {
-    left: auto;
-    right: calc(50% + 284px + 24px);
+  /* The sections keep to 280px on the side nearest the clock */
+  .study-side-inner {
+    padding: 112px 24px 48px max(40px, calc(100% - 304px));
   }
-  .study-side > .block:first-child,
-  .study-side > [hidden] + .block {
-    margin-top: 0;
+  .study-side-right .study-side-inner {
+    padding: 112px max(40px, calc(100% - 304px)) 48px 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .study-side,
+  .study-side.collapsed {
+    transition: none;
   }
 }
 

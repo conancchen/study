@@ -46,6 +46,12 @@
   <div class="page">
     <header class="header">
       <div class="header-row">
+        <button class="icon-button" id="side-toggle" type="button" aria-controls="side-left side-right" aria-label="Sidebars" title="Sidebars">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 6h16M4 12h16M4 18h16"></path>
+          </svg>
+        </button>
+
 
         <div class="header-actions">
         <button class="icon-button" id="settings-open" type="button" aria-label="Settings" title="Settings">
@@ -153,9 +159,10 @@
   <ol class="study-laps" id="laps"></ol>
 </section>
 
-<div class="study-side study-side-left">
+<aside class="study-side study-side-left" id="side-left">
+<div class="study-side-inner" id="side-left-inner">
 <section class="block study-stats" id="stats">
-  <h2 class="block-label block-label-plain"><button class="block-toggle" type="button" aria-expanded="true">Stats</button></h2>
+  <h2 class="block-label block-label-plain">Stats</h2>
   <div class="row"><span>Today</span><span class="row-year" id="stat-today"></span></div>
   <div class="row"><span>This week</span><span class="row-year" id="stat-week"></span></div>
   <div class="row"><span>All time</span><span class="row-year" id="stat-all"></span></div>
@@ -166,7 +173,7 @@
 </section>
 
 <section class="block study-ambient" id="ambient">
-  <h2 class="block-label block-label-plain ambient-label"><button class="block-toggle" type="button" aria-expanded="true">Ambient</button><button class="icon-button ambient-mute" id="ambient-mute" type="button" aria-pressed="false" aria-label="Mute" title="Mute">
+  <h2 class="block-label block-label-plain ambient-label"><span>Ambient</span><button class="icon-button ambient-mute" id="ambient-mute" type="button" aria-pressed="false" aria-label="Mute" title="Mute">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <rect x="9" y="2" width="6" height="12" rx="3"></rect>
       <path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4M8 22h8"></path>
@@ -176,10 +183,12 @@
   <div id="ambient-sounds"></div>
 </section>
 </div>
+</aside>
 
-<div class="study-side">
+<aside class="study-side study-side-right" id="side-right">
+<div class="study-side-inner" id="side-right-inner">
 <section class="block study-friends" id="friends" hidden>
-  <h2 class="block-label block-label-plain"><button class="block-toggle" type="button" aria-expanded="true">Friends</button></h2>
+  <h2 class="block-label block-label-plain">Friends</h2>
   <div id="friends-signed-out" hidden>
     <p class="invite-note" id="invite-note" hidden>You've been invited to be friends. Sign in to accept.</p>
     <p class="study-backup"><button class="study-backup-option" id="sign-in" type="button">Sign in with Google</button></p>
@@ -200,6 +209,7 @@
   </div>
 </section>
 </div>
+</aside>
 
   <dialog class="settings" id="settings" aria-label="Settings">
     <div id="settings-account-block" hidden>
@@ -902,26 +912,46 @@
       input.onblur = function () { if (!input.value.trim()) form.remove(); };
     }
 
-    // Stats, Ambient and Friends fold away to just their heading with a
-    // click on it, and stay that way on the next visit
+    // Stats and Ambient on the left, Friends on the right, sit in sidebars
+    // that slide off to the edges of the screen, both at once, with a click
+    // on the three bars at the top left of the middle column. With room beside the clock they
+    // start open on every visit. On a narrow screen
+    // Friends moves into the left one, which starts shut and floats over the
+    // page when opened; a click elsewhere or Escape puts it away again.
     (function () {
-      var KEY = 'study-collapsed';
-      var folded = {};
-      try { folded = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
-      document.querySelectorAll('.block-toggle').forEach(function (btn) {
-        var section = btn.closest('section');
-        function set(collapsed) {
-          section.classList.toggle('collapsed', collapsed);
-          btn.setAttribute('aria-expanded', !collapsed);
-        }
-        set(!!folded[section.id]);
-        btn.addEventListener('click', function () {
-          var collapsed = !section.classList.contains('collapsed');
-          set(collapsed);
-          if (collapsed) folded[section.id] = true; else delete folded[section.id];
-          try { localStorage.setItem(KEY, JSON.stringify(folded)); } catch (e) {}
-          section.dispatchEvent(new CustomEvent('study:fold', { detail: { collapsed: collapsed } }));
+      var wide = window.matchMedia('(min-width: 1200px)');
+      var button = document.getElementById('side-toggle');
+      var left = document.getElementById('side-left');
+      var right = document.getElementById('side-right');
+      var friends = document.getElementById('friends');
+
+      function set(open) {
+        [left, right].forEach(function (side) {
+          side.classList.toggle('collapsed', !open);
+          side.querySelector('.study-side-inner').inert = !open;
         });
+        button.setAttribute('aria-expanded', open);
+        button.classList.toggle('active', open);
+      }
+      function reset() {
+        if (wide.matches) right.querySelector('.study-side-inner').appendChild(friends);
+        else left.querySelector('.study-side-inner').prepend(friends);
+        set(wide.matches);
+      }
+
+      button.addEventListener('click', function () {
+        set(left.classList.contains('collapsed'));
+      });
+      reset();
+      wide.addEventListener('change', reset);
+      document.addEventListener('click', function (e) {
+        if (wide.matches) return;
+        // The path, not contains(): the click may have re-rendered what it hit
+        var path = e.composedPath();
+        if (path.indexOf(left) < 0 && path.indexOf(button) < 0) set(false);
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !wide.matches) set(false);
       });
     })();
 
