@@ -175,6 +175,11 @@ a:focus {
   outline: none;
 }
 
+.study-now {
+  color: var(--muted);
+  white-space: pre;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -256,6 +261,49 @@ a:focus {
 
 .block-label-plain {
   font-weight: 400;
+}
+
+/* A section's heading folds it away; the arrow turns to show which way */
+.block-toggle {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.block-toggle:hover {
+  color: var(--text);
+}
+
+.block-toggle::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 0 3px 8px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+
+.collapsed .block-toggle::after {
+  transform: rotate(-45deg);
+  margin-bottom: 1px;
+}
+
+.block-toggle:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.block.collapsed > :not(.block-label) {
+  display: none !important;
+}
+
+.block.collapsed > .block-label {
+  margin-bottom: 0;
 }
 
 .row {
@@ -502,6 +550,49 @@ a:focus {
   color: inherit;
 }
 
+.study-heading .study-at {
+  padding: 0 0.15em;
+}
+
+/* Where you're studying, typed straight into the heading like the name */
+.study-place {
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  outline: none;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--underline);
+  text-underline-offset: 4px;
+}
+
+/* The filled-in rest of a place shows as faint text rather than a
+   highlighted selection */
+.study-place::selection {
+  color: var(--muted);
+  background: transparent;
+}
+
+.study-place::placeholder {
+  color: var(--muted);
+}
+
+.study-place:hover {
+  text-decoration-color: currentColor;
+}
+
+/* The clock's readout, on its own line under the heading */
+p.study-time {
+  margin: 10px 0 0;
+  text-align: center;
+  color: var(--text);
+  font-size: calc(16px * var(--base-scale, 1) * var(--text-scale, 1));
+  font-variant-numeric: tabular-nums;
+}
+
 .study-at {
   flex: none;
   color: var(--muted);
@@ -539,7 +630,7 @@ a:focus {
 .study-clock {
   width: 320px;
   max-width: 100%;
-  margin: 16px 0 12px;
+  margin: 24px 0 12px;
 }
 
 .study-dial {
@@ -795,8 +886,13 @@ a:focus {
   cursor: pointer;
 }
 
-.study-backup-option:hover {
+.study-backup-option:hover:not(:disabled) {
   color: var(--text);
+}
+
+.study-backup-option:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .study-stats .row-year {
@@ -917,6 +1013,12 @@ a:focus {
   background: var(--break);
 }
 
+/* Not mid-turn: a hollow dot */
+.board-now-idle::before {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--muted);
+}
+
 .board-now-running::before {
   animation: board-breathe 2s ease-in-out infinite;
 }
@@ -935,10 +1037,11 @@ a:focus {
   padding-left: 1.4em;
 }
 
-/* With room beside the timer, Friends moves out of the column into a sidebar
-   on its right, level with the clock, and stays put while the page scrolls */
+/* With room beside the timer, the other sections move out of the column into
+   sidebars level with the clock that stay put while the page scrolls: Friends
+   on the right, Rooms and Stats on the left */
 @media screen and (min-width: 1200px) {
-  .study-friends {
+  .study-side {
     position: fixed;
     top: 112px;
     left: calc(50% + 284px + 24px);
@@ -946,6 +1049,14 @@ a:focus {
     max-height: calc(100vh - 160px);
     overflow-y: auto;
     margin: 0;
+  }
+  .study-side-left {
+    left: auto;
+    right: calc(50% + 284px + 24px);
+  }
+  .study-side > .block:first-child,
+  .study-side > [hidden] + .block {
+    margin-top: 0;
   }
 }
 
@@ -1018,31 +1129,358 @@ a:focus {
   outline: none;
 }
 
-/* Rooms takes the left of the timer, as Friends takes the right */
-@media screen and (min-width: 1200px) {
-  .study-rooms {
-    position: fixed;
-    top: 112px;
-    right: calc(50% + 284px + 24px);
-    width: 280px;
-    max-height: calc(100vh - 160px);
-    overflow-y: auto;
-    margin: 0;
-  }
-}
-
 .study-rooms .board-now {
   margin-left: 0;
 }
 
-/* Spotify's compact player, for songs from Spotify */
+/* Spotify's player, for songs from Spotify. It only fills itself out at a
+   few set heights (any extra is left blank), so it's either its smaller
+   152px or, opened up, its large 352px with a big cover and a playlist's
+   tracks */
 .room-player-spotify {
-  height: 80px;
+  height: 152px;
   border-radius: 12px;
   overflow: hidden;
+}
+
+.room-player-spotify.room-player-big {
+  height: 352px;
+}
+
+.room-player-spotify iframe {
+  height: 100% !important;
 }
 
 .room-player[hidden],
 .room-player-spotify[hidden] {
   display: none;
+}
+
+/* Settings: username, default location, the stats file, and signing out */
+.settings {
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  padding: 20px 24px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+}
+
+.settings::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.settings .study-backup {
+  margin-top: 16px;
+}
+
+.settings .settings-line {
+  margin-top: 8px;
+}
+
+.settings-field {
+  width: 18ch;
+  text-align: left;
+}
+
+.settings-done {
+  margin: 24px 0 0;
+  text-align: right;
+}
+
+.settings-done .study-button {
+  min-width: 0;
+}
+
+.room-name[contenteditable] {
+  cursor: text;
+  outline: none;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--underline);
+  text-underline-offset: 4px;
+}
+
+.room-name[contenteditable]:hover {
+  text-decoration-color: currentColor;
+}
+
+/* Map, its own section under Friends: the campus drawn flat, in the
+   page's own colors, with friends pinned where they study */
+:root {
+  --map-land: #efeee9;
+  --map-grounds: #f6f5f1;
+  --map-green: #e3e9dc;
+  --map-wood: #d9e2d1;
+  --map-field: #dbe5d3;
+  --map-water: #d6e1ea;
+  --map-parking: #e8e7e2;
+  --map-path: #dfddd6;
+  --map-road: #ffffff;
+  --map-building: #d5d3cb;
+}
+
+:root[data-theme=dark] {
+  --map-land: #151514;
+  --map-grounds: #1a1a19;
+  --map-green: #1b211b;
+  --map-wood: #19201a;
+  --map-field: #1d251d;
+  --map-water: #17202a;
+  --map-parking: #1f1f1e;
+  --map-path: #262624;
+  --map-road: #2e2e2c;
+  --map-building: #35352f;
+}
+
+.friends-map {
+  position: relative;
+  height: 260px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--map-land);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.friends-map.map-dragging {
+  cursor: grabbing;
+}
+
+.map-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.map-svg path {
+  vector-effect: non-scaling-stroke;
+}
+
+.map-grounds {
+  fill: var(--map-grounds);
+}
+
+.map-green {
+  fill: var(--map-green);
+}
+
+.map-wood {
+  fill: var(--map-wood);
+}
+
+.map-field {
+  fill: var(--map-field);
+}
+
+.map-water {
+  fill: var(--map-water);
+}
+
+.map-parking {
+  fill: var(--map-parking);
+}
+
+.map-drive {
+  fill: none;
+  stroke: var(--map-road);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-path {
+  fill: none;
+  stroke: var(--map-path);
+  stroke-width: 1;
+}
+
+.map-road {
+  fill: none;
+  stroke: var(--map-road);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-building {
+  fill: var(--map-building);
+}
+
+.map-pins {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* A dot in the turn's color, with the names above it */
+.map-pin {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  padding: 0;
+  border: 2px solid var(--map-land);
+  border-radius: 50%;
+  background: var(--study);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.map-pin-break {
+  background: var(--break);
+}
+
+.map-label {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  white-space: nowrap;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+
+.map-card {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  cursor: default;
+}
+
+.map-card strong {
+  display: block;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.map-card[hidden] {
+  display: none;
+}
+
+.map-zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.map-zoom button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.map-zoom button + button {
+  border-top: 1px solid var(--rule);
+}
+
+.map-zoom button:hover {
+  color: var(--text);
+}
+
+.study-backup .active {
+  color: var(--text);
+}
+
+/* A friend's stats, opened from the board, above their turns */
+.board-stats .row {
+  padding: 2px 0;
+}
+
+.board-stats {
+  padding-bottom: 10px;
+}
+
+/* Song search: what Spotify finds, listed under the box to queue with a click */
+.music-add {
+  position: relative;
+}
+
+.music-results {
+  position: absolute;
+  z-index: 10;
+  top: 100%;
+  left: 0;
+  right: 0;
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+}
+
+.music-results[hidden] {
+  display: none;
+}
+
+.music-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.music-result.picked {
+  background: var(--chip-bg);
+}
+
+.music-result img {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+}
+
+.music-result-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.music-result-title,
+.music-result-by {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-result-title {
+  font-size: calc(13px * var(--base-scale, 1) * var(--text-scale, 1));
+}
+
+.music-result-by {
+  color: var(--muted);
+  font-size: calc(11px * var(--base-scale, 1) * var(--text-scale, 1));
 }

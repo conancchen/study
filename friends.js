@@ -10,14 +10,19 @@
 //
 // Without a Supabase project in config.js, Friends stays hidden, except on
 // localhost, where it runs as a preview: signing in shows the board with just
-// you on it, live from this timer, and nothing is sent anywhere.
+// you on it, live from this timer, and nothing is sent anywhere. Adding
+// ?preview to a localhost address gets the same preview even with a project
+// set up, so everything behind sign-in can be tried without a Google login.
 (function () {
   var config = window.STUDY_CONFIG || {};
   var section = document.getElementById('friends');
-  var configured = !!(config.supabaseUrl && config.supabaseAnonKey && window.supabase);
-  var PREVIEW = !configured && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  var local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  var PREVIEW = local && (/[?&]preview\b/.test(location.search) || !(config.supabaseUrl && config.supabaseAnonKey));
+  var configured = !PREVIEW && !!(config.supabaseUrl && config.supabaseAnonKey && window.supabase);
   if (!configured && !PREVIEW) return;
   section.hidden = false;
+  // The account part of settings comes with Friends
+  document.getElementById('settings-account-block').hidden = false;
 
   var HISTORY_KEY = 'study-history';
   var INVITE_KEY = 'study-invite';
@@ -43,7 +48,10 @@
   var boardEl = document.getElementById('board');
   var sortEl = document.getElementById('board-sort');
   var requestsEl = document.getElementById('requests');
-  var whoEl = document.getElementById('friends-who');
+  var usernameEl = document.getElementById('username');
+  var accountEl = document.getElementById('settings-account');
+  var accountOutEl = document.getElementById('settings-signed-out');
+  var signOutEl = document.getElementById('settings-sign-out');
 
   // An invite link is kept until it can be used, through the Google sign-in
   // and its redirect if need be
@@ -64,11 +72,6 @@
     var pad = function (n) { return (n < 10 ? '0' : '') + n; };
     var h = Math.floor(s / 3600);
     return h ? h + ':' + pad(Math.floor(s / 60) % 60) + ':' + pad(s % 60) : Math.floor(s / 60) + ':' + pad(s % 60);
-  }
-
-  // How long a status's turn has run, counting on from when it last started
-  function running(st) {
-    return st.banked_ms + (st.since ? Date.now() - Date.parse(st.since) : 0);
   }
 
   // A status worth showing: a turn under way, and touched recently
@@ -139,10 +142,17 @@
       room_id: window.studyRoom ? window.studyRoom.id : null,
       room_name: window.studyRoom ? window.studyRoom.name : null,
       room_code: window.studyRoom ? window.studyRoom.code : null,
+      place: now.place,
       updated_at: new Date().toISOString()
     };
     if (!PREVIEW) {
       var res = await db.from('status').upsert(row);
+      // Until the place column is added (supabase/schema.sql), the rest still goes up
+      if (res.error && res.error.code === 'PGRST204') {
+        var rest = Object.assign({}, row);
+        delete rest.place;
+        res = await db.from('status').upsert(rest);
+      }
       if (res.error) { console.error(res.error); return; }
     }
     statuses[me.id] = row;
@@ -160,11 +170,13 @@
     preview: PREVIEW,
     me: function () { return me; },
     statuses: function () { return statuses; },
+    friends: function () { return rows; },  // you included, as on the board
     pushStatus: pushStatus,
     signIn: function () { document.getElementById('sign-in').click(); },
+    // What someone's doing and where, e.g. "Studying · Firestone Library"
     describe: function (st) {
       var verb = !st.since ? 'Paused' : st.kind === 'brk' ? 'On break' : 'Studying';
-      return verb + ' · ' + st.title + ' · ' + clock(running(st)) + (st.target_ms ? ' / ' + clock(st.target_ms) : '');
+      return verb + (st.place ? ' · ' + st.place : '');
     },
     active: active
   };
@@ -182,8 +194,8 @@
     try { code = localStorage.getItem(INVITE_KEY); localStorage.removeItem(INVITE_KEY); } catch (e) {}
     if (!code) return;
     var res = await db.rpc('accept_invite', { code: code });
-    if (res.error) alert(res.error.message);
-    else if (res.data !== me.display_name) alert('You and ' + res.data + ' are now friends.');
+    if (res.error) toast(res.error.message);
+    else if (res.data !== me.display_name) toast('You and ' + res.data + ' are now friends');
   }
 
   async function refresh() {
@@ -202,6 +214,7 @@
       announce(null);
     }
     renderBoard();
+    document.dispatchEvent(new CustomEvent('study:friends'));
 
     var pending = await db.from('friendships')
       .select('requester, profiles!friendships_requester_fkey(username, display_name)')
@@ -246,39 +259,51 @@
       line.appendChild(value);
       summary.appendChild(line);
 
+      // Everyone gets a line, so who's studying and who isn't reads at a glance
       var st = statuses[row.id];
-      if (active(st)) {
-        var now = document.createElement('p');
-        now.className = 'board-now' + (st.kind === 'brk' ? ' board-now-break' : '') + (st.since ? ' board-now-running' : '');
-        now.dataset.user = row.id;
-        summary.appendChild(now);
-      }
+      var now = document.createElement('p');
+      now.className = !active(st) ? 'board-now board-now-idle'
+        : 'board-now' + (st.kind === 'brk' ? ' board-now-break' : '') + (st.since ? ' board-now-running' : '');
+      now.dataset.user = row.id;
+      summary.appendChild(now);
       entry.appendChild(summary);
+      entry.appendChild(statsNote(row));
       entry.appendChild(turnsNote(st));
       li.appendChild(entry);
       boardEl.appendChild(li);
     });
     tickBoard();
-    if (sorted.length < 2) {
-      var hint = document.createElement('li');
-      hint.className = 'study-chart-caption';
-      hint.textContent = 'No friends yet. Send someone your invite link.';
-      boardEl.appendChild(hint);
-    }
 
     Object.keys(SORTS).forEach(function (key) {
       sortEl.querySelector('[data-sort="' + key + '"]').classList.toggle('active', key === sort);
     });
   }
 
-  // The live line under someone studying: what the turn is, and its time
-  // (out of its length, in timer mode). Runs every second.
+  // The line under each person: whether they're studying, and where
   function tickBoard() {
     boardEl.querySelectorAll('.board-now').forEach(function (el) {
       var st = statuses[el.dataset.user];
-      if (!st) return;
-      el.textContent = window.studySocial.describe(st) + (st.room_name ? ' · in ' + st.room_name : '');
+      el.textContent = active(st) ? window.studySocial.describe(st) : 'On break';
     });
+  }
+
+  // Opening someone shows their stats, the same four as your own
+  function statsNote(row) {
+    var note = document.createElement('div');
+    note.className = 'row-note board-stats';
+    Object.keys(SORTS).forEach(function (key) {
+      var line = document.createElement('div');
+      line.className = 'row';
+      var label = document.createElement('span');
+      label.textContent = SORTS[key].label;
+      var value = document.createElement('span');
+      value.className = 'row-year';
+      value.textContent = show(row[SORTS[key].field], key);
+      line.appendChild(label);
+      line.appendChild(value);
+      note.appendChild(line);
+    });
+    return note;
   }
 
   // Opening someone lists the turns on their timer, newest first
@@ -287,7 +312,7 @@
     note.className = 'row-note';
     var laps = st && Date.now() - Date.parse(st.updated_at) < STALE ? st.laps.slice().reverse() : [];
     if (!laps.length) {
-      note.textContent = 'No finished turns on their timer right now.';
+      note.textContent = 'No sessions yet';
       return note;
     }
     var list = document.createElement('ol');
@@ -301,10 +326,11 @@
       name.className = 'study-name';
       name.textContent = lap.title;
       label.appendChild(name);
-      if (lap.at) {
+      if (lap.at || lap.place) {
         var at = document.createElement('span');
         at.className = 'study-at';
-        at.textContent = ' · ' + new Date(lap.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        at.textContent = (lap.at ? ' · ' + new Date(lap.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '')
+          + (lap.place ? ' · ' + lap.place : '');
         label.appendChild(at);
       }
       var time = document.createElement('span');
@@ -338,7 +364,7 @@
           var q = db.from('friendships');
           q = pair[1] ? q.update({ accepted: true }) : q.delete();
           var res = await q.eq('requester', req.requester).eq('addressee', me.id);
-          if (res.error) alert(res.error.message);
+          if (res.error) toast(res.error.message);
           refresh();
         };
         actions.appendChild(btn);
@@ -378,7 +404,10 @@
       me = { id: 'me', username: 'you', display_name: 'You', invite_code: 'preview' };
       signedOutEl.hidden = true;
       signedInEl.hidden = false;
-      whoEl.textContent = '@you (preview)';
+      accountEl.hidden = false;
+      accountOutEl.hidden = true;
+      signOutEl.hidden = false;
+      usernameEl.value = me.username;
       await pushStatus();
       await refresh();
       document.dispatchEvent(new CustomEvent('study:signed-in'));
@@ -388,12 +417,15 @@
       me = await loadProfile(user);
     } catch (e) {
       console.error(e);
-      alert('Couldn\'t load your Friends profile.');
+      toast('Couldn\'t load your Friends profile');
       return;
     }
     signedOutEl.hidden = true;
     signedInEl.hidden = false;
-    whoEl.textContent = '@' + me.username;
+    accountEl.hidden = false;
+    accountOutEl.hidden = true;
+    signOutEl.hidden = false;
+    usernameEl.value = me.username;
     await useInvite();
     await pushStatus();
     await sync();
@@ -425,14 +457,17 @@
     document.dispatchEvent(new CustomEvent('study:signed-out'));
     signedOutEl.hidden = false;
     signedInEl.hidden = true;
+    accountEl.hidden = true;
+    accountOutEl.hidden = false;
+    signOutEl.hidden = true;
   }
 
   // In the preview, the account buttons only say what they'd do
   if (PREVIEW) {
-    ['invite', 'add-friend', 'rename'].forEach(function (id) {
+    ['invite', 'add-friend'].forEach(function (id) {
       document.getElementById(id).addEventListener('click', function (e) {
         e.stopImmediatePropagation();
-        alert('Preview only: this works once Supabase is set up (see the README).');
+        toast('Not available in preview');
       }, true);
     });
   }
@@ -442,6 +477,11 @@
     db.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
   });
 
+  document.getElementById('settings-sign-in').addEventListener('click', function () {
+    document.getElementById('settings').close();
+    document.getElementById('sign-in').click();
+  });
+
   document.getElementById('sign-out').addEventListener('click', async function () {
     if (!PREVIEW) await db.auth.signOut();
     signedOut();
@@ -449,32 +489,38 @@
 
   document.getElementById('invite').addEventListener('click', function () {
     var link = location.origin + location.pathname + '?invite=' + me.invite_code;
-    copyText(link).then(function () {
-      var toast = document.getElementById('copy-toast');
-      toast.textContent = 'Invite link copied';
-      toast.style.opacity = '1';
-      setTimeout(function () { toast.style.opacity = '0'; }, 2000);
+    copyText(link).then(function () { toast('Invite link copied'); });
+  });
+
+  document.getElementById('add-friend').addEventListener('click', function () {
+    askInline(this.parentNode, 'Their username', async function (name) {
+      name = name.replace(/^@/, '').toLowerCase();
+      var found = await db.from('profiles').select('id, display_name').eq('username', name).maybeSingle();
+      if (!found.data) { toast('No one goes by @' + name); return; }
+      var res = await db.from('friendships').insert({ requester: me.id, addressee: found.data.id });
+      if (res.error && res.error.code === '23505') toast('You\'ve already asked ' + found.data.display_name);
+      else if (res.error) toast(res.error.message);
+      else toast('Request sent to ' + found.data.display_name);
     });
   });
 
-  document.getElementById('add-friend').addEventListener('click', async function () {
-    var name = (prompt('Their username:') || '').trim().replace(/^@/, '').toLowerCase();
-    if (!name) return;
-    var found = await db.from('profiles').select('id, display_name').eq('username', name).maybeSingle();
-    if (!found.data) { alert('No one goes by @' + name + '.'); return; }
-    var res = await db.from('friendships').insert({ requester: me.id, addressee: found.data.id });
-    if (res.error && res.error.code === '23505') alert('You\'ve already asked ' + found.data.display_name + '.');
-    else if (res.error) alert(res.error.message);
-    else alert('Asked ' + found.data.display_name + '. They\'ll show up once they accept.');
-  });
-
-  document.getElementById('rename').addEventListener('click', async function () {
-    var name = (prompt('New username (3–20 letters, numbers or _):', me.username) || '').trim().toLowerCase();
-    if (!name || name === me.username) return;
+  // The username is changed in settings; it saves on Enter or clicking away
+  usernameEl.addEventListener('change', async function () {
+    var name = usernameEl.value.trim().replace(/^@/, '').toLowerCase();
+    if (PREVIEW) { usernameEl.value = me.username; toast('Not available in preview'); return; }
+    if (!name || name === me.username) { usernameEl.value = me.username; return; }
     var res = await db.from('profiles').update({ username: name }).eq('id', me.id).select().single();
-    if (res.error) { alert(res.error.code === '23505' ? '@' + name + ' is taken.' : 'Usernames are 3–20 letters, numbers or _.'); return; }
+    if (res.error) {
+      toast(res.error.code === '23505' ? '@' + name + ' is taken' : 'Usernames are 3–20 letters, numbers or _');
+      usernameEl.value = me.username;
+      return;
+    }
     me = res.data;
-    whoEl.textContent = '@' + me.username;
+    usernameEl.value = me.username;
+    toast('Username saved');
+  });
+  usernameEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') usernameEl.blur();
   });
 
   sortEl.addEventListener('click', function (e) {

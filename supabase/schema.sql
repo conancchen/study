@@ -57,11 +57,13 @@ create table if not exists status (
   room_id uuid references rooms on delete set null,  -- the room they're in now
   room_name text,
   room_code text,
+  place text,
   updated_at timestamptz not null default now()
 );
 alter table status add column if not exists room_id uuid references rooms on delete set null;
 alter table status add column if not exists room_name text;
 alter table status add column if not exists room_code text;
+alter table status add column if not exists place text;  -- where they're studying, as they typed it
 
 -- A friendship is one row, from whoever asked to whoever was asked
 create table if not exists friendships (

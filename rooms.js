@@ -7,7 +7,11 @@
 // (friends.js), which tells it who is where.
 //
 // Spotify plays through its embed player: whole songs for anyone signed into
-// Spotify in that browser, and 30-second previews for anyone who isn't.
+// Spotify in that browser, and 30-second previews for anyone who isn't. A
+// Spotify playlist or album goes in the queue as one item that plays through
+// on its own (only play and pause are shared, since each listener's player
+// keeps its own place in it). Spotify Jams can't be embedded, so the room's
+// own queue stands in for one.
 //
 // The music state lives on the room as { queue, index, playing, position, at }:
 // the song at index was at position seconds at the moment at (ms), so where
@@ -37,6 +41,9 @@
   var nowEl = document.getElementById('room-now');
   var playBtn = document.getElementById('music-play');
   var skipBtn = document.getElementById('music-skip');
+  var shuffleBtn = document.getElementById('music-shuffle');
+  var sizeBtn = document.getElementById('music-size');
+  var BIG_KEY = 'study-player-big';
   var queueEl = document.getElementById('music-queue');
   var unmuteEl = document.getElementById('music-unmute');
   var linkInput = document.getElementById('music-link');
@@ -68,12 +75,17 @@
     roomEl.hidden = !me || !room;
   }
 
-  // A song from a pasted link: a YouTube video (any usual link, or a bare
-  // id) or a Spotify track or episode (a link or a spotify: uri)
+  // What a pasted link is: a Spotify track, episode, playlist, album or show
+  // (a link or a spotify: uri), or a YouTube video (any usual link, or a
+  // bare id)
   function parseLink(text) {
     text = text.trim();
-    var sp = text.match(/(?:open\.spotify\.com\/(?:intl-[\w-]+\/)?|spotify:)(track|episode)[\/:]([A-Za-z0-9]{22})/);
-    if (sp) return { source: 'spotify', id: 'spotify:' + sp[1] + ':' + sp[2] };
+    var sp = text.match(/(?:open\.spotify\.com\/(?:intl-[\w-]+\/)?|spotify:)(track|episode|playlist|album|show)[\/:]([A-Za-z0-9]{22})/);
+    if (sp) {
+      var song = { source: 'spotify', id: 'spotify:' + sp[1] + ':' + sp[2] };
+      if (!/track|episode/.test(sp[1])) song.kind = sp[1];
+      return song;
+    }
     if (/^[\w-]{11}$/.test(text)) return { source: 'youtube', id: text };
     var yt = text.match(/(?:youtu\.be\/|[?&]v=|\/(?:embed|shorts|live)\/)([\w-]{11})/);
     return yt ? { source: 'youtube', id: yt[1] } : null;
@@ -93,6 +105,12 @@
     return room && room.music.queue[room.music.index];
   }
 
+  // A playlist, album or show: it plays through by itself, with no one place
+  // to keep everyone at
+  function collection(song) {
+    return !!(song && song.kind);
+  }
+
   /* Joining and leaving */
 
   async function enter(code) {
@@ -104,7 +122,7 @@
     } else {
       var res = await db.rpc('join_room', { code: code });
       if (res.error) {
-        alert(res.error.message);
+        toast(res.error.message);
         remember(null);
         return;
       }
@@ -145,31 +163,47 @@
       .subscribe();
   }
 
+  // A new room starts with a default name; click the name to change it
   document.getElementById('room-new').addEventListener('click', async function () {
     var me = social.me();
-    var name = (prompt('Name the room:', me.display_name.split(' ')[0] + '\'s room') || '').trim().slice(0, 40);
-    if (!name) return;
+    var name = me.display_name.split(' ')[0] + '\'s room';
     if (PREVIEW) { enter(name); return; }
     var res = await db.from('rooms').insert({ name: name }).select().single();
-    if (res.error) { alert(res.error.message); return; }
+    if (res.error) { toast(res.error.message); return; }
     enter(res.data.code);
   });
 
   document.getElementById('room-join').addEventListener('click', function () {
-    var code = (prompt('Room code:') || '').trim().toLowerCase();
-    if (code) enter(code);
+    askInline(this.parentNode, 'Room code', function (code) { enter(code.toLowerCase()); });
+  });
+
+  // The room's name is edited in place, like a turn's: click and type, then
+  // Enter or click away to save (Escape backs out). Anyone in it can rename it.
+  nameEl.contentEditable = 'plaintext-only';
+  nameEl.spellcheck = false;
+  nameEl.title = 'Rename';
+  nameEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); }
+    else if (e.key === 'Escape') { nameEl.textContent = room.name; nameEl.blur(); }
+  });
+  nameEl.addEventListener('blur', async function () {
+    if (!room) return;
+    var name = nameEl.textContent.replace(/\s+/g, ' ').trim().slice(0, 40);
+    nameEl.textContent = name || room.name;
+    if (!name || name === room.name) return;
+    room.name = name;
+    window.studyRoom = { id: room.id, name: room.name, code: room.code };
+    social.pushStatus();
+    if (PREVIEW) return;
+    var res = await db.from('rooms').update({ name: name }).eq('id', room.id);
+    if (res.error) toast(res.error.message);
   });
 
   document.getElementById('room-leave').addEventListener('click', leave);
 
   document.getElementById('room-copy').addEventListener('click', function () {
     var link = location.origin + location.pathname + '?room=' + room.code;
-    copyText(link).then(function () {
-      var toast = document.getElementById('copy-toast');
-      toast.textContent = 'Room link copied · code ' + room.code;
-      toast.style.opacity = '1';
-      setTimeout(function () { toast.style.opacity = '0'; }, 2000);
-    });
+    copyText(link).then(function () { toast('Room link copied · code ' + room.code); });
   });
 
   /* The lobby: rooms friends are in now, then ones you've been in */
@@ -200,12 +234,6 @@
     recent.forEach(function (r) {
       listEl.appendChild(lobbyRow(r.code, r.name, r.code, false));
     });
-    if (!listEl.children.length) {
-      var hint = document.createElement('li');
-      hint.className = 'study-chart-caption';
-      hint.textContent = 'Start a room, then send friends its link.';
-      listEl.appendChild(hint);
-    }
   }
 
   function lobbyRow(code, name, note, busy) {
@@ -289,7 +317,7 @@
 
   function renderRoom() {
     if (!room) return;
-    nameEl.textContent = room.name;
+    if (document.activeElement !== nameEl) nameEl.textContent = room.name;
     window.studyRoom = { id: room.id, name: room.name, code: room.code };
     renderMembers();
     renderMusic();
@@ -301,14 +329,17 @@
   function renderMusic() {
     var m = room.music;
     var song = current();
-    nowEl.textContent = song ? (m.playing ? 'Playing · ' : 'Paused · ') + song.title : 'Nothing playing. Paste a YouTube or Spotify link below.';
+    // The player shows what's on; this only speaks up when nothing is
+    nowEl.textContent = 'Nothing playing';
+    nowEl.hidden = !!song;
     playBtn.textContent = m.playing ? 'Pause' : 'Play';
     playBtn.disabled = !song;
     skipBtn.disabled = !song;
+    shuffleBtn.disabled = m.queue.length - m.index < 3;  // fewer than two waiting
 
     queueEl.innerHTML = '';
     m.queue.forEach(function (item, i) {
-      if (i < m.index) return;  // already played
+      if (i <= m.index) return;  // played, or on now (the player shows that)
       var li = document.createElement('li');
       li.className = 'row study-lap' + (i === m.index ? ' music-current' : ' study-lap-break');
       var label = document.createElement('span');
@@ -317,6 +348,12 @@
       name.className = 'study-name';
       name.textContent = item.title;
       label.appendChild(name);
+      if (item.kind) {
+        var kind = document.createElement('span');
+        kind.className = 'study-at';
+        kind.textContent = ' · ' + item.kind;
+        label.appendChild(kind);
+      }
       li.appendChild(label);
       if (i > m.index) {
         var remove = document.createElement('button');
@@ -383,47 +420,60 @@
       }
     },
 
-    // Spotify's embed holds commands while a song loads and runs them once
-    // it's ready, so a load can be followed straight away by play
+    // Spotify's embed drops commands sent while a song is still loading, so a
+    // load waits for the song to be ready (or to first report its position)
+    // and only then seeks and plays, to wherever the room has got to by then
     spotify: {
-      ctl: null, ready: false, loaded: null, state: null,
+      ctl: null, ready: false, loaded: null, state: null, pending: false,
       start: function () {
         var self = this;
         if (self.started) return;
         self.started = true;
         window.onSpotifyIframeApiReady = function (api) {
-          api.createController(document.getElementById('room-spotify'), { width: '100%', height: 80 }, function (ctl) {
+          api.createController(document.getElementById('room-spotify'), { width: '100%', height: 352 }, function (ctl) {
             self.ctl = ctl;
             self.ready = true;
+            ctl.addListener('ready', function () { self.settle(); });
             ctl.addListener('playback_update', function (e) {
               var was = self.state;
               self.state = e.data;
+              if (e.data.duration) self.settle();
               if (!e.data.isPaused) unmuteEl.hidden = true;
               // Reaching the end of a whole song moves the room on. A
               // 30-second preview ending doesn't, or listeners who aren't
               // signed into Spotify would cut the song short for everyone.
               var full = e.data.duration > 31000;
-              if (full && was && !was.isPaused && e.data.position >= e.data.duration - 1500) ended('spotify');
+              if (full && was && !was.isPaused && !collection(current()) && e.data.position >= e.data.duration - 1500) ended('spotify');
             });
             applyMusic();
           });
         };
         load('https://open.spotify.com/embed/iframe-api/v1');
       },
-      load: function (id, at, playing) {
+      load: function (id) {
         this.loaded = id;
         this.state = null;
-        this.ctl.loadUri(id, false, Math.floor(at));
-        if (playing) this.ctl.play();
+        this.pending = true;
+        this.ctl.loadUri(id);
+      },
+      // The song just loaded: catch up with the room
+      settle: function () {
+        if (!this.pending || !room) return;
+        this.pending = false;
+        var at = expected(room.music);
+        if (at > 1 && !collection(current())) this.ctl.seek(Math.floor(at));
+        if (room.music.playing) this.ctl.play();
       },
       sync: function (at, playing) {
-        if (this.state && Math.abs(this.state.position / 1000 - at) > 3) this.ctl.seek(at);
+        if (this.pending) return;  // settle() catches up once it's loaded
+        if (this.state && !collection(current()) && Math.abs(this.state.position / 1000 - at) > 3) this.ctl.seek(at);
         if (playing && (!this.state || this.state.isPaused)) this.ctl.resume();
         if (!playing && this.state && !this.state.isPaused) this.ctl.pause();
       },
       stop: function () {
         if (this.loaded) this.ctl.pause();
         this.loaded = null;
+        this.pending = false;
       },
       time: function () { return this.state ? this.state.position / 1000 : null; },
       sounding: function () { return !!(this.state && !this.state.isPaused); }
@@ -452,6 +502,7 @@
     var kind = song && sourceOf(song);
     youtubeEl.hidden = kind !== 'youtube';
     spotifyEl.hidden = kind !== 'spotify';
+    sizeBtn.hidden = kind !== 'spotify';
     Object.keys(players).forEach(function (k) {
       if (k !== kind && players[k].ready) players[k].stop();
     });
@@ -510,6 +561,34 @@
 
   skipBtn.addEventListener('click', function () { skip(room.music.index); });
 
+  // Mixes up everything waiting to play, for everyone; what's on now carries on
+  shuffleBtn.addEventListener('click', function () {
+    var m = Object.assign({}, room.music);
+    var waiting = m.queue.slice(m.index + 1);
+    for (var i = waiting.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var swap = waiting[i]; waiting[i] = waiting[j]; waiting[j] = swap;
+    }
+    m.queue = m.queue.slice(0, m.index + 1).concat(waiting);
+    writeMusic(m);
+  });
+
+  // The Spotify player starts at its smaller size and opens up to its
+  // larger one; it stays that way next time
+  function size(big) {
+    spotifyEl.classList.toggle('room-player-big', big);
+    sizeBtn.textContent = big ? '· Smaller' : '· Bigger';
+  }
+  try { size(!!localStorage.getItem(BIG_KEY)); } catch (e) { size(false); }
+  sizeBtn.addEventListener('click', function () {
+    var big = !spotifyEl.classList.contains('room-player-big');
+    size(big);
+    try {
+      if (big) localStorage.setItem(BIG_KEY, '1');
+      else localStorage.removeItem(BIG_KEY);
+    } catch (e) {}
+  });
+
   unmuteEl.addEventListener('click', function () {
     unmuteEl.hidden = true;
     var song = current();
@@ -519,25 +598,133 @@
 
   document.getElementById('music-add').addEventListener('submit', async function (e) {
     e.preventDefault();
+    // Enter on a search picks the highlighted result
+    if (results.length && picked >= 0) { pick(picked); return; }
     var song = parseLink(linkInput.value);
-    if (!song) { alert('Paste a YouTube video, or a Spotify song or podcast episode.'); return; }
+    if (!song) {
+      if (/spotify\.link|socialsession/.test(linkInput.value)) toast('Jams can\'t play here; add songs to the queue');
+      else if (/^\s*https?:/.test(linkInput.value) || !searchDb) toast('Not a YouTube or Spotify link');
+      return;
+    }
     linkInput.value = '';
+    showResults([]);
     // Titles come from each site's oEmbed, which pages can read directly
     var spotify = song.source === 'spotify';
     var url = spotify
       ? 'https://open.spotify.com/oembed?url=' + encodeURIComponent('https://open.spotify.com/' + song.id.split(':').slice(1).join('/'))
       : 'https://noembed.com/embed?url=' + encodeURIComponent('https://www.youtube.com/watch?v=' + song.id);
-    song.title = spotify ? 'Spotify song' : 'YouTube video';
+    song.title = spotify ? 'Spotify ' + (song.kind || 'song') : 'YouTube video';
     try {
       var info = await (await fetch(url)).json();
       if (info.title) song.title = info.title;
     } catch (err) {}
+    queueSong(song);
+  });
+
+  // Adds to the end of the queue, and starts it if nothing was playing
+  function queueSong(song) {
     var m = Object.assign({}, room.music);
     var idle = m.index >= m.queue.length;
     m.queue = m.queue.concat([song]);
     if (idle) Object.assign(m, { playing: true, position: 0, at: Date.now() });
     writeMusic(m);
+  }
+
+  /* Searching */
+
+  // Typing anything that isn't a link searches Spotify, through the
+  // spotify-search function (supabase/functions), and lists what it finds
+  // under the box. Click one, or move with the arrows and press Enter, to
+  // queue it. Searching works in the preview too, as it needs no sign-in.
+  var resultsEl = document.getElementById('music-results');
+  var config = window.STUDY_CONFIG || {};
+  var searchDb = db || (config.supabaseUrl && config.supabaseAnonKey && window.supabase
+    ? window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, { auth: { persistSession: false } })
+    : null);
+  var results = [];
+  var picked = -1;
+  var searchTimer;
+  var searchSeq = 0;
+  var searchWarned = false;
+
+  linkInput.addEventListener('input', function () {
+    clearTimeout(searchTimer);
+    var text = linkInput.value.trim();
+    if (!searchDb || text.length < 2 || /^https?:|^spotify:/.test(text)) { showResults([]); return; }
+    searchTimer = setTimeout(function () { find(text); }, 250);
   });
+
+  async function find(text) {
+    var seq = ++searchSeq;
+    var res = await searchDb.functions.invoke('spotify-search', { body: { q: text } });
+    if (seq !== searchSeq) return;  // a newer search has gone out since
+    var error = res.error || (res.data && res.data.error);
+    if (error) {
+      console.error(error);
+      if (!searchWarned) { searchWarned = true; toast('Song search isn\'t set up yet; paste a link instead'); }
+      showResults([]);
+      return;
+    }
+    showResults(res.data.results || []);
+  }
+
+  function showResults(list) {
+    results = list;
+    picked = list.length ? 0 : -1;
+    resultsEl.innerHTML = '';
+    list.forEach(function (r, i) {
+      var li = document.createElement('li');
+      li.className = 'music-result';
+      if (r.art) {
+        var img = document.createElement('img');
+        img.src = r.art;
+        img.alt = '';
+        li.appendChild(img);
+      }
+      var title = document.createElement('span');
+      title.className = 'music-result-title';
+      title.textContent = r.title;
+      var by = document.createElement('span');
+      by.className = 'music-result-by';
+      by.textContent = (r.kind ? r.kind + ' · ' : '') + r.by;
+      var text = document.createElement('span');
+      text.className = 'music-result-text';
+      text.appendChild(title);
+      text.appendChild(by);
+      li.appendChild(text);
+      // On press rather than click, so the box losing focus doesn't clear the list first
+      li.addEventListener('mousedown', function (e) { e.preventDefault(); pick(i); });
+      li.addEventListener('mouseenter', function () { picked = i; mark(); });
+      resultsEl.appendChild(li);
+    });
+    resultsEl.hidden = !list.length;
+    mark();
+  }
+
+  function mark() {
+    Array.prototype.forEach.call(resultsEl.children, function (li, i) {
+      li.classList.toggle('picked', i === picked);
+    });
+  }
+
+  function pick(i) {
+    var r = results[i];
+    if (!r) return;
+    var song = { source: 'spotify', id: r.id, title: r.kind ? r.title : r.title + ' · ' + r.by };
+    if (r.kind) song.kind = r.kind;
+    linkInput.value = '';
+    showResults([]);
+    queueSong(song);
+  }
+
+  linkInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { showResults([]); return; }
+    if (!results.length || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
+    e.preventDefault();
+    picked = (picked + (e.key === 'ArrowDown' ? 1 : -1) + results.length) % results.length;
+    mark();
+  });
+  linkInput.addEventListener('blur', function () { showResults([]); });
 
   /* Keeping up */
 
