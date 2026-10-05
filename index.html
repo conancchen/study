@@ -153,45 +153,6 @@
 </section>
 
 <div class="study-side study-side-left">
-<section class="block study-rooms" id="rooms" hidden>
-  <h2 class="block-label block-label-plain"><button class="block-toggle" type="button" aria-expanded="true">Rooms</button></h2>
-  <div id="rooms-signed-out" hidden>
-    <p class="study-backup"><button class="study-backup-option" id="rooms-sign-in" type="button">Sign in with Google</button></p>
-  </div>
-  <div id="rooms-lobby" hidden>
-    <ul class="board" id="rooms-list"></ul>
-    <p class="study-backup">
-      <button class="study-backup-option" id="room-new" type="button">New room</button>
-      · <button class="study-backup-option" id="room-join" type="button">Join with code</button>
-    </p>
-  </div>
-  <div id="room" hidden>
-    <p class="room-name" id="room-name"></p>
-    <ul class="board" id="room-members"></ul>
-    <div class="room-music">
-      <div class="room-player" id="room-player-youtube" hidden><div id="room-youtube"></div></div>
-      <div class="room-player-spotify" id="room-player-spotify" hidden><div id="room-spotify"></div></div>
-      <p class="study-chart-caption" id="room-now"></p>
-      <p class="study-backup">
-        <button class="study-backup-option" id="music-play" type="button">Play</button>
-        · <button class="study-backup-option" id="music-skip" type="button">Skip</button>
-        · <button class="study-backup-option" id="music-shuffle" type="button">Shuffle</button>
-        <button class="study-backup-option" id="music-size" type="button" hidden>· Bigger</button>
-        <button class="study-backup-option music-unmute" id="music-unmute" type="button" hidden>· Unmute</button>
-      </p>
-      <form class="music-add" id="music-add">
-        <input class="music-link" id="music-link" type="text" placeholder="Search for a song, or paste a link" aria-label="Search for a song, or paste a YouTube or Spotify link" autocomplete="off" spellcheck="false">
-        <ol class="music-results" id="music-results" hidden></ol>
-      </form>
-      <ol class="study-laps" id="music-queue"></ol>
-    </div>
-    <p class="study-backup">
-      <button class="study-backup-option" id="room-copy" type="button">Copy room link</button>
-      · <button class="study-backup-option" id="room-leave" type="button">Leave</button>
-    </p>
-  </div>
-</section>
-
 <section class="block study-stats" id="stats">
   <h2 class="block-label block-label-plain"><button class="block-toggle" type="button" aria-expanded="true">Stats</button></h2>
   <div class="row"><span>Today</span><span class="row-year" id="stat-today"></span></div>
@@ -982,7 +943,7 @@
       input.onblur = function () { if (!input.value.trim()) form.remove(); };
     }
 
-    // Rooms, Stats, Friends and Map fold away to just their heading with a
+    // Stats, Friends and Map fold away to just their heading with a
     // click on it, and stay that way on the next visit
     (function () {
       var KEY = 'study-collapsed';
@@ -1038,7 +999,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
   <script src="./friends.js"></script>
-  <script src="./rooms.js"></script>
   <script src="./map.js"></script>
 </body>
 

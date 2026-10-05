@@ -139,9 +139,6 @@
       since: now.since ? new Date(now.since).toISOString() : null,
       target_ms: now.target,
       laps: now.laps.slice(-50),
-      room_id: window.studyRoom ? window.studyRoom.id : null,
-      room_name: window.studyRoom ? window.studyRoom.name : null,
-      room_code: window.studyRoom ? window.studyRoom.code : null,
       place: now.place,
       updated_at: new Date().toISOString()
     };
@@ -160,7 +157,7 @@
     if (rows.length) renderBoard();
   }
 
-  // Rooms (rooms.js) shares this sign-in and these statuses
+  // The map (map.js) shares this sign-in and these statuses
   function announce(row) {
     document.dispatchEvent(new CustomEvent('study:status', { detail: row }));
   }
@@ -445,8 +442,8 @@
         if (!row || !row.user_id) return;
         statuses[row.user_id] = row;
         announce(row);
-        // Roommates who aren't friends come through too, but stay off the board
         if (rows.some(function (r) { return r.id === row.user_id; })) renderBoard();
+        else refresh();  // someone new, like a friend just added
       })
       .subscribe();
   }
