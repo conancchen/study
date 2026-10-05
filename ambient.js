@@ -2,7 +2,8 @@
 // the Web Audio API, so there are no files to load. Every slider starts all
 // the way left, silent; sliding one up plays that sound (any number at once),
 // and back to the left stops it. Clicking a name does the same in one go.
-// Mute silences them all at once and leaves the sliders where they are.
+// Mute silences them all at once and leaves the sliders where they are; it
+// starts on, so nothing plays until the speaker is clicked.
 (function () {
   var section = document.getElementById('ambient');
   var list = document.getElementById('ambient-sounds');
@@ -14,7 +15,7 @@
   var buffers = {};
   var playing = {};  // name: { stop, gain }
   var volumes = {};  // name: volume from 0 to 1, all 0 to begin with
-  var muted = false;
+  var muted = true;
   var muteBtn = document.getElementById('ambient-mute');
 
   // A few seconds of noise, looped: white is flat, pink falls off gently,

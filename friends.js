@@ -13,6 +13,9 @@
 // you on it, live from this timer, and nothing is sent anywhere. Adding
 // ?preview to a localhost address gets the same preview even with a project
 // set up, so everything behind sign-in can be tried without a Google login.
+// The preview comes with a few made-up friend requests, so the notifications
+// bell and its count can be tried too, and the one you've "sent" is accepted
+// a few seconds in; ?preview=empty starts with none.
 (function () {
   var config = window.STUDY_CONFIG || {};
   var section = document.getElementById('friends');
@@ -49,11 +52,69 @@
   var boardEl = document.getElementById('board');
   var sortEl = document.getElementById('board-sort');
   var requestsEl = document.getElementById('requests');
+  var notifyEl = document.getElementById('friends-notify');
+  var notifyCountEl = document.getElementById('notify-count');
   var usernameEl = document.getElementById('username');
   var accountEl = document.getElementById('settings-account');
   var accountOutEl = document.getElementById('settings-signed-out');
   var signOutEl = document.getElementById('settings-sign-out');
   var inviteNoteEl = document.getElementById('invite-note');
+
+  // The preview's pretend requests, shaped like the database's, and the
+  // pretend friends accepting them adds to the board
+  var demoPending = [];
+  var demoFriends = [];
+  var demoTimer;
+  function seedDemo() {
+    demoFriends = [];
+    memory = {};
+    clearTimeout(demoTimer);
+    if (/[?&]preview=empty\b/.test(location.search)) { demoPending = []; return; }
+    var jo = { requester: 'me', addressee: 'demo-jo', receiver: { username: 'jo_k', display_name: 'Jo Kim' } };
+    demoPending = [
+      { requester: 'demo-maya', addressee: 'me', sender: { username: 'maya', display_name: 'Maya Lin' } },
+      { requester: 'demo-sam', addressee: 'me', sender: { username: 'samr', display_name: 'Sam Rivera' } },
+      jo
+    ];
+    demoTimer = setTimeout(function () {
+      if (!me || demoPending.indexOf(jo) < 0) return;
+      demoPending.splice(demoPending.indexOf(jo), 1);
+      demoFriends.push({ id: 'demo-jo', username: 'jo_k', display_name: 'Jo Kim', today_ms: 0, week_ms: 0, all_ms: 0, streak: 0 });
+      refresh();
+    }, 8000);
+  }
+
+  // Requests you've sent, as last seen, and the ones since accepted, kept per
+  // account in this browser; the preview keeps them in memory instead
+  var memory = {};
+  function recall(key) {
+    key += '-' + me.id;
+    if (PREVIEW) return memory[key] || [];
+    try { return JSON.parse(localStorage.getItem(key)) || []; } catch (e) { return []; }
+  }
+  function keep(key, list) {
+    key += '-' + me.id;
+    if (PREVIEW) { memory[key] = list; return; }
+    try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) {}
+  }
+
+  // A request you sent that's gone from the waiting list, and whose person is
+  // now on the board, was accepted; one that's gone otherwise was declined or
+  // cancelled, and says nothing
+  function acceptances(outgoing) {
+    var accepted = recall('study-accepted');
+    recall('study-sent').forEach(function (sent) {
+      var still = outgoing.some(function (req) { return req.addressee === sent.id; });
+      var friend = rows.some(function (row) { return row.id === sent.id; });
+      if (!still && friend && !accepted.some(function (a) { return a.id === sent.id; })) accepted.push(sent);
+    });
+    keep('study-sent', outgoing.map(function (req) {
+      var who = req.receiver || {};
+      return { id: req.addressee, username: who.username, display_name: who.display_name, avatar_url: who.avatar_url };
+    }));
+    keep('study-accepted', accepted);
+    return accepted;
+  }
 
   // An invite link is kept until it can be used, through the Google sign-in
   // and its redirect if need be
@@ -218,8 +279,9 @@
 
   async function refresh() {
     if (PREVIEW) {
-      rows = [myTotals()];
+      rows = [myTotals()].concat(demoFriends);
       renderBoard();
+      renderRequests(demoPending);
       return;
     }
     var board = await db.rpc('leaderboard', { tz: TZ });
@@ -411,6 +473,16 @@
         btn.textContent = pair[0];
         btn.onclick = async function () {
           actions.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+          if (PREVIEW) {
+            demoPending.splice(demoPending.indexOf(req), 1);
+            if (pair[1]) {
+              demoFriends.push({ id: req.requester, username: who.username, display_name: who.display_name,
+                today_ms: 0, week_ms: 0, all_ms: 0, streak: 0 });
+              toast('You and ' + who.display_name + ' are now friends');
+            }
+            refresh();
+            return;
+          }
           var q = db.from('friendships');
           q = pair[1] ? q.update({ accepted: true }) : q.delete();
           var res = await q.eq('requester', req.requester).eq('addressee', me.id);
@@ -420,6 +492,37 @@
         };
         actions.appendChild(btn);
       });
+      li.appendChild(text);
+      li.appendChild(actions);
+      requestsEl.appendChild(li);
+    });
+    // Requests you sent that were accepted, each until it's dismissed
+    var accepted = acceptances(outgoing);
+    accepted.forEach(function (who) {
+      var li = document.createElement('li');
+      li.className = 'request';
+      if (who.avatar_url) li.appendChild(avatar(who)).classList.add('request-avatar');
+      var text = document.createElement('div');
+      text.className = 'request-who';
+      var name = document.createElement('div');
+      name.className = 'request-name';
+      name.textContent = who.display_name || 'Someone';
+      var sub = document.createElement('div');
+      sub.className = 'request-sub';
+      sub.textContent = 'accepted your request';
+      text.appendChild(name);
+      text.appendChild(sub);
+      var actions = document.createElement('div');
+      actions.className = 'request-actions';
+      var ok = document.createElement('button');
+      ok.type = 'button';
+      ok.className = 'study-button request-button';
+      ok.textContent = 'OK';
+      ok.onclick = function () {
+        keep('study-accepted', recall('study-accepted').filter(function (a) { return a.id !== who.id; }));
+        refresh();
+      };
+      actions.appendChild(ok);
       li.appendChild(text);
       li.appendChild(actions);
       requestsEl.appendChild(li);
@@ -435,6 +538,11 @@
       cancel.className = 'study-backup-option';
       cancel.textContent = 'Cancel';
       cancel.onclick = async function () {
+        if (PREVIEW) {
+          demoPending.splice(demoPending.indexOf(req), 1);
+          refresh();
+          return;
+        }
         var res = await db.from('friendships').delete().eq('requester', me.id).eq('addressee', req.addressee);
         if (res.error) toast(res.error.message);
         refresh();
@@ -443,7 +551,29 @@
       li.appendChild(cancel);
       requestsEl.appendChild(li);
     });
+    if (!pending.length && !accepted.length) {
+      var empty = document.createElement('li');
+      empty.className = 'row requests-empty';
+      empty.textContent = 'No friend requests';
+      requestsEl.appendChild(empty);
+    }
+    // The bell counts requests waiting on you and acceptances not yet seen
+    var count = incoming.length + accepted.length;
+    notifyCountEl.hidden = !count;
+    notifyCountEl.textContent = count > 9 ? '9+' : count;
+    var label = count ? 'Notifications (' + count + ' new)' : 'Notifications';
+    notifyEl.setAttribute('aria-label', label);
+    notifyEl.title = label;
   }
+
+  // The bell opens and shuts the requests above the board
+  function showRequests(open) {
+    requestsEl.hidden = !open;
+    notifyEl.setAttribute('aria-expanded', open);
+  }
+  notifyEl.addEventListener('click', function () {
+    showRequests(requestsEl.hidden);
+  });
 
   // Your own row in the preview, worked out from this browser's history the
   // way the database would
@@ -480,6 +610,8 @@
   async function signIn(user) {
     if (PREVIEW) {
       me = { id: 'me', username: 'you', display_name: 'You', invite_code: 'preview' };
+      seedDemo();
+      notifyEl.hidden = false;
       signedOutEl.hidden = true;
       signedInEl.hidden = false;
       accountEl.hidden = false;
@@ -498,6 +630,7 @@
       toast('Couldn\'t load your Friends profile');
       return;
     }
+    notifyEl.hidden = false;
     signedOutEl.hidden = true;
     signedInEl.hidden = false;
     accountEl.hidden = false;
@@ -543,6 +676,8 @@
     me = null;
     if (channel) { db.removeChannel(channel); channel = null; }
     document.dispatchEvent(new CustomEvent('study:signed-out'));
+    notifyEl.hidden = true;
+    showRequests(false);
     signedOutEl.hidden = false;
     signedInEl.hidden = true;
     inviteNoteEl.hidden = !pendingInvite();

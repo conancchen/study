@@ -173,11 +173,11 @@
 </section>
 
 <section class="block study-ambient" id="ambient">
-  <h2 class="block-label block-label-plain ambient-label"><span>Ambient</span><button class="icon-button ambient-mute" id="ambient-mute" type="button" aria-pressed="false" aria-label="Mute" title="Mute">
+  <h2 class="block-label block-label-plain ambient-label"><span>Ambient</span><button class="icon-button ambient-mute" id="ambient-mute" type="button" aria-pressed="true" aria-label="Unmute" title="Unmute">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="9" y="2" width="6" height="12" rx="3"></rect>
-      <path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4M8 22h8"></path>
-      <path class="ambient-mute-off" d="M3 3l18 18"></path>
+      <path d="M4 9h3l4.3-3.6a.5.5 0 0 1 .7.4v12.4a.5.5 0 0 1-.7.4L7 15H4a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1z" fill="currentColor"></path>
+      <path class="ambient-mute-on" d="M15.5 9a4.5 4.5 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"></path>
+      <path class="ambient-mute-off" d="M16 9.5l5 5M21 9.5l-5 5"></path>
     </svg>
   </button></h2>
   <div id="ambient-sounds"></div>
@@ -188,13 +188,19 @@
 <aside class="study-side study-side-right" id="side-right">
 <div class="study-side-inner" id="side-right-inner">
 <section class="block study-friends" id="friends" hidden>
-  <h2 class="block-label block-label-plain">Friends</h2>
+  <h2 class="block-label block-label-plain friends-label"><span>Friends</span><button class="icon-button friends-notify" id="friends-notify" type="button" aria-expanded="false" aria-controls="requests" aria-label="Notifications" title="Notifications" hidden>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
+    </svg>
+    <span class="notify-count" id="notify-count" hidden></span>
+  </button></h2>
   <div id="friends-signed-out" hidden>
     <p class="invite-note" id="invite-note" hidden>You've been invited to be friends. Sign in to accept.</p>
     <p class="study-backup"><button class="study-backup-option" id="sign-in" type="button">Sign in with Google</button></p>
   </div>
   <div id="friends-signed-in" hidden>
-    <ul class="board requests" id="requests"></ul>
+    <ul class="board requests" id="requests" hidden></ul>
     <p class="study-backup board-sort" id="board-sort">
       <button class="study-backup-option" data-sort="today" type="button">Today</button>
       · <button class="study-backup-option" data-sort="week" type="button">This week</button>
