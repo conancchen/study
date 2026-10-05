@@ -226,8 +226,10 @@
   // A stopwatch that runs in turns: a study session, then a break, then the
   // next session, and so on. The lap button closes the current turn and starts
   // the other kind; every finished turn goes on the list, newest on top. The
-  // whole thing is saved as it goes, so a refresh or a closed tab picks back up
-  // where it left off (a running timer keeps counting while the tab is gone).
+  // whole thing is saved as it goes, so a refresh picks back up where it left
+  // off. A closed tab stops the clock, though: while running it notes the time
+  // every few seconds, and if the page comes back (or wakes from sleep) to find
+  // that note gone stale, the turn is paused as of the last time it was open.
   // The dial shows the current turn on an analog face: the second hand sweeps
   // once a minute, the minute hand and the arc around the rim once an hour.
   // The digital readout follows the current turn's name, above the dial.
@@ -251,11 +253,15 @@
     var HISTORY_KEY = 'study-history';
     var CHART_DAYS = 5;
     var LABEL = { study: 'Session', brk: 'Break' };
+    var BEAT = 5000;
+    // Longer than a refresh, and than a background tab's slowest timers
+    var GRACE = 2 * 60000;
 
     // laps: finished turns, oldest first, as { kind, ms, at, name }
     // current: the turn on the clock, with the ms banked before the last start
     // (at is when the turn first started; name is only set once renamed)
     // since: when the clock last started, or null while paused
+    // seen: while running, the last moment the page was known to be open
     var state = load(KEY) || fresh();
 
     // mode: 'stopwatch' or 'timer'; minutes: each kind's length in timer mode
@@ -322,8 +328,9 @@
       return settings.minutes[kind] * 60000;
     }
 
-    function elapsed() {
-      return state.current.ms + (state.since ? Date.now() - state.since : 0);
+    // As of now, or of an earlier time t
+    function elapsed(t) {
+      return state.current.ms + (state.since ? (t || Date.now()) - state.since : 0);
     }
 
     // Counting down rounds up, so a fresh 25 minutes reads 25:00, not 24:59
@@ -421,10 +428,11 @@
     // In timer mode, closes every turn whose countdown has run out (more than
     // one if the tab was away), each ending exactly on time, with the next
     // starting where it ended. Chimes only if the last one just ran out.
-    function advance() {
+    // Given t, only counts up to then (for a tab that was closed at t).
+    function advance(t) {
       if (!timed() || !state.since) return;
       var ended = null;
-      while (elapsed() >= target(state.current.kind)) {
+      while (elapsed(t) >= target(state.current.kind)) {
         var length = target(state.current.kind);
         ended = state.since + (length - state.current.ms);
         state.current.ms = length;
@@ -646,11 +654,30 @@
         state.since = null;
       } else {
         unlockAudio();
-        state.since = Date.now();
+        state.since = state.seen = Date.now();
         if (!state.current.at) state.current.at = state.since;
       }
       save();
       render();
+    }
+
+    // Notes that the page is open while the clock runs, unless the last note
+    // is so old the tab must have been closed or asleep: then the turn stops
+    // where it was last seen
+    function beat() {
+      if (!state.since) return;
+      if (state.seen && Date.now() - state.seen > GRACE) {
+        advance(state.seen);
+        state.current.ms = elapsed(state.seen);
+        state.since = null;
+        save();
+        render();
+        // (later, since on arrival the toast's script hasn't run yet)
+        setTimeout(function () { toast('Paused while the tab was closed'); });
+        return;
+      }
+      state.seen = Date.now();
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
     }
 
     function lap() {
@@ -724,8 +751,11 @@
       else if (e.key === 'Enter') { e.preventDefault(); lap(); }
     });
 
+    beat();  // stops a turn left running in a tab that was closed
     save();  // also tells Friends where the clock stands on arrival
     render();
+    setInterval(beat, BEAT);
+    window.addEventListener('pagehide', beat);
     // Every frame while running, so the second hand sweeps instead of jumping
     (function frame() {
       if (state.since) { advance(); tick(); }

@@ -42,6 +42,7 @@
   var opened = {};  // board entries left open, by user id
   var uploaded = {};  // turn start times already sent up this visit
   var STALE = 12 * 3600000;  // a status untouched this long is shown as idle
+  var LAPSED = 3 * 60000;     // a running status not re-sent this long was left in a closed tab
 
   var signedOutEl = document.getElementById('friends-signed-out');
   var signedInEl = document.getElementById('friends-signed-in');
@@ -85,10 +86,21 @@
     return st && (st.since || st.banked_ms > 0) && Date.now() - Date.parse(st.updated_at) < STALE;
   }
 
+  // Someone's status, read as paused where it was last sent if a running
+  // clock has gone quiet (their tab closed; it's re-sent every minute)
+  function status(id) {
+    var st = statuses[id];
+    if (!st || !st.since) return st;
+    var last = Date.parse(st.updated_at);
+    if (Date.now() - last < LAPSED) return st;
+    var ms = st.banked_ms + Math.max(0, last - Date.parse(st.since));
+    return Object.assign({}, st, { since: null, banked_ms: st.target_ms ? Math.min(ms, st.target_ms) : ms });
+  }
+
   // The study turn someone has on the clock right now, which the database
   // only counts once it's finished
   function running(id) {
-    var st = statuses[id];
+    var st = status(id);
     if (!active(st) || st.kind !== 'study') return 0;
     return st.banked_ms + (st.since ? Math.max(0, Date.now() - Date.parse(st.since)) : 0);
   }
@@ -269,7 +281,7 @@
       summary.appendChild(line);
 
       // Everyone gets a line, so who's studying and who isn't reads at a glance
-      var st = statuses[row.id];
+      var st = status(row.id);
       var now = document.createElement('p');
       now.className = !active(st) ? 'board-now board-now-idle'
         : 'board-now' + (st.kind === 'brk' ? ' board-now-break' : '') + (st.since ? ' board-now-running' : '');
@@ -292,7 +304,7 @@
   // and every total, with any turn still running counted in
   function tickBoard() {
     boardEl.querySelectorAll('.board-now').forEach(function (el) {
-      var st = statuses[el.dataset.user];
+      var st = status(el.dataset.user);
       el.textContent = active(st) ? window.studySocial.describe(st) : 'On break';
     });
     var byId = {};
@@ -640,6 +652,8 @@
   // The timer fires this every time it saves
   document.addEventListener('study:save', saved);
   setInterval(function () { if (me) tickBoard(); }, 1000);
+  // Re-sends a running clock, so friends can tell an open tab from a closed one
+  setInterval(function () { if (me && window.studyNow && window.studyNow.since) pushStatus(); }, 60000);
   // Friends' totals move while they study, so the board refreshes now and then
   setInterval(function () { if (me && !document.hidden) refresh(); }, 60000);
 
