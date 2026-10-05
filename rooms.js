@@ -1,10 +1,13 @@
 // Rooms: study together with friends. A room has a short code and a link;
 // anyone signed in who has either can join. Inside, everyone in the room is
 // listed with what their own timer is doing, live, and the room plays music
-// from a shared queue of YouTube links that stays in step for everyone: any
+// from a shared queue of YouTube and Spotify links that stays in step for everyone: any
 // member can add a song, play, pause or skip, and the change reaches the
 // others at once. It runs on the same sign-in and statuses as Friends
 // (friends.js), which tells it who is where.
+//
+// Spotify plays through its embed player: whole songs for anyone signed into
+// Spotify in that browser, and 30-second previews for anyone who isn't.
 //
 // The music state lives on the room as { queue, index, playing, position, at }:
 // the song at index was at position seconds at the moment at (ms), so where
@@ -24,9 +27,6 @@
   var room = null;  // { id, code, name, music }
   var channel = null;
   var names = {};  // display names of people in the room, by user id
-  var player = null;
-  var playerReady = false;
-  var loadedId = null;  // the video the player has, so a change of song is spotted
 
   var signedOutEl = document.getElementById('rooms-signed-out');
   var lobbyEl = document.getElementById('rooms-lobby');
@@ -40,6 +40,8 @@
   var queueEl = document.getElementById('music-queue');
   var unmuteEl = document.getElementById('music-unmute');
   var linkInput = document.getElementById('music-link');
+  var youtubeEl = document.getElementById('room-player-youtube');
+  var spotifyEl = document.getElementById('room-player-spotify');
 
   // A room link is kept until it can be used, through sign-in if need be
   var params = new URLSearchParams(location.search);
@@ -66,12 +68,20 @@
     roomEl.hidden = !me || !room;
   }
 
-  // The 11-character id in any usual YouTube link, or a bare id
-  function videoId(text) {
+  // A song from a pasted link: a YouTube video (any usual link, or a bare
+  // id) or a Spotify track or episode (a link or a spotify: uri)
+  function parseLink(text) {
     text = text.trim();
-    if (/^[\w-]{11}$/.test(text)) return text;
-    var m = text.match(/(?:youtu\.be\/|[?&]v=|\/(?:embed|shorts|live)\/)([\w-]{11})/);
-    return m ? m[1] : null;
+    var sp = text.match(/(?:open\.spotify\.com\/(?:intl-[\w-]+\/)?|spotify:)(track|episode)[\/:]([A-Za-z0-9]{22})/);
+    if (sp) return { source: 'spotify', id: 'spotify:' + sp[1] + ':' + sp[2] };
+    if (/^[\w-]{11}$/.test(text)) return { source: 'youtube', id: text };
+    var yt = text.match(/(?:youtu\.be\/|[?&]v=|\/(?:embed|shorts|live)\/)([\w-]{11})/);
+    return yt ? { source: 'youtube', id: yt[1] } : null;
+  }
+
+  // Songs added before Spotify came along are all YouTube
+  function sourceOf(song) {
+    return song.source || 'youtube';
   }
 
   // Where the current song should be now, in seconds
@@ -105,17 +115,14 @@
     remember(room.code);
     window.studyRoom = { id: room.id, name: room.name, code: room.code };
     names[me.id] = me.display_name;
-    loadedId = null;
     view();
     renderRoom();
     social.pushStatus();
-    loadPlayer();
   }
 
   function leave() {
     if (channel) { db.removeChannel(channel); channel = null; }
-    if (playerReady) player.stopVideo();
-    loadedId = null;
+    stopAll();
     room = null;
     window.studyRoom = null;
     remember(null);
@@ -294,7 +301,7 @@
   function renderMusic() {
     var m = room.music;
     var song = current();
-    nowEl.textContent = song ? (m.playing ? 'Playing · ' : 'Paused · ') + song.title : 'Nothing playing. Paste a YouTube link below.';
+    nowEl.textContent = song ? (m.playing ? 'Playing · ' : 'Paused · ') + song.title : 'Nothing playing. Paste a YouTube or Spotify link below.';
     playBtn.textContent = m.playing ? 'Pause' : 'Play';
     playBtn.disabled = !song;
     skipBtn.disabled = !song;
@@ -327,35 +334,148 @@
     });
   }
 
-  // Brings the player in line with the room: the right song, at the right
-  // spot, playing or not
+  // The two players, each made the first time a song of its kind comes up and
+  // driven the same way: load a song at a spot, playing or not; keep it in
+  // step; stop; say where it is and whether it's making sound
+  var players = {
+    youtube: {
+      player: null, ready: false, loaded: null,
+      start: function () {
+        var self = this;
+        if (self.started) return;
+        self.started = true;
+        window.onYouTubeIframeAPIReady = function () {
+          self.player = new YT.Player('room-youtube', {
+            width: '100%',
+            height: '100%',
+            // Its own controls are off, so every change goes through the
+            // buttons and is shared
+            playerVars: { controls: 0, disablekb: 1, playsinline: 1, rel: 0 },
+            events: {
+              onReady: function () { self.ready = true; applyMusic(); },
+              onStateChange: function (e) {
+                if (e.data === YT.PlayerState.ENDED) ended('youtube');
+                if (e.data === YT.PlayerState.PLAYING) unmuteEl.hidden = true;
+              }
+            }
+          });
+        };
+        load('https://www.youtube.com/iframe_api');
+      },
+      load: function (id, at, playing) {
+        this.loaded = id;
+        if (playing) this.player.loadVideoById(id, at);
+        else this.player.cueVideoById(id, at);
+      },
+      sync: function (at, playing) {
+        if (Math.abs(this.player.getCurrentTime() - at) > 2) this.player.seekTo(at, true);
+        if (playing) this.player.playVideo();
+        else this.player.pauseVideo();
+      },
+      stop: function () {
+        if (this.loaded) this.player.stopVideo();
+        this.loaded = null;
+      },
+      time: function () { return this.player.getCurrentTime(); },
+      sounding: function () {
+        var state = this.player.getPlayerState();
+        return state === 1 || state === 3;  // playing or buffering
+      }
+    },
+
+    // Spotify's embed holds commands while a song loads and runs them once
+    // it's ready, so a load can be followed straight away by play
+    spotify: {
+      ctl: null, ready: false, loaded: null, state: null,
+      start: function () {
+        var self = this;
+        if (self.started) return;
+        self.started = true;
+        window.onSpotifyIframeApiReady = function (api) {
+          api.createController(document.getElementById('room-spotify'), { width: '100%', height: 80 }, function (ctl) {
+            self.ctl = ctl;
+            self.ready = true;
+            ctl.addListener('playback_update', function (e) {
+              var was = self.state;
+              self.state = e.data;
+              if (!e.data.isPaused) unmuteEl.hidden = true;
+              // Reaching the end of a whole song moves the room on. A
+              // 30-second preview ending doesn't, or listeners who aren't
+              // signed into Spotify would cut the song short for everyone.
+              var full = e.data.duration > 31000;
+              if (full && was && !was.isPaused && e.data.position >= e.data.duration - 1500) ended('spotify');
+            });
+            applyMusic();
+          });
+        };
+        load('https://open.spotify.com/embed/iframe-api/v1');
+      },
+      load: function (id, at, playing) {
+        this.loaded = id;
+        this.state = null;
+        this.ctl.loadUri(id, false, Math.floor(at));
+        if (playing) this.ctl.play();
+      },
+      sync: function (at, playing) {
+        if (this.state && Math.abs(this.state.position / 1000 - at) > 3) this.ctl.seek(at);
+        if (playing && (!this.state || this.state.isPaused)) this.ctl.resume();
+        if (!playing && this.state && !this.state.isPaused) this.ctl.pause();
+      },
+      stop: function () {
+        if (this.loaded) this.ctl.pause();
+        this.loaded = null;
+      },
+      time: function () { return this.state ? this.state.position / 1000 : null; },
+      sounding: function () { return !!(this.state && !this.state.isPaused); }
+    }
+  };
+
+  function load(src) {
+    var script = document.createElement('script');
+    script.src = src;
+    document.head.appendChild(script);
+  }
+
+  function stopAll() {
+    Object.keys(players).forEach(function (k) {
+      if (players[k].ready) players[k].stop();
+    });
+    unmuteEl.hidden = true;
+  }
+
+  // Brings the players in line with the room: the right song in the right
+  // player, at the right spot, playing or not, and the other player quiet
   function applyMusic() {
-    if (!room || !playerReady) return;
+    if (!room) return;
     var m = room.music;
     var song = current();
-    if (!song) {
-      if (loadedId) player.stopVideo();
-      loadedId = null;
-      unmuteEl.hidden = true;
-      return;
-    }
+    var kind = song && sourceOf(song);
+    youtubeEl.hidden = kind !== 'youtube';
+    spotifyEl.hidden = kind !== 'spotify';
+    Object.keys(players).forEach(function (k) {
+      if (k !== kind && players[k].ready) players[k].stop();
+    });
+    if (!song) { unmuteEl.hidden = true; return; }
+
+    var p = players[kind];
+    if (!p.ready) { p.start(); return; }  // comes back here once it's ready
     var at = expected(m);
-    if (song.id !== loadedId) {
-      loadedId = song.id;
-      if (m.playing) player.loadVideoById(song.id, at);
-      else player.cueVideoById(song.id, at);
-    } else {
-      if (Math.abs(player.getCurrentTime() - at) > 2) player.seekTo(at, true);
-      if (m.playing) player.playVideo();
-      else player.pauseVideo();
-    }
+    if (song.id !== p.loaded) p.load(song.id, at, m.playing);
+    else p.sync(at, m.playing);
+
     // Browsers hold back sound until the page has been clicked, so a room
     // already playing on arrival may need one
     clearTimeout(applyMusic.check);
     applyMusic.check = setTimeout(function () {
-      var state = player.getPlayerState();
-      unmuteEl.hidden = !(room && room.music.playing && state !== 1 && state !== 3);
-    }, 1500);
+      unmuteEl.hidden = !(room && room.music.playing && current() === song && !p.sounding());
+    }, 2500);
+  }
+
+  // A song finished in the player of this kind; moves on if it's still the
+  // room's current song
+  function ended(kind) {
+    var song = current();
+    if (room && song && sourceOf(song) === kind) skip(room.music.index);
   }
 
   // Changes the music for everyone: here at once, then in the room
@@ -369,7 +489,10 @@
   }
 
   function position() {
-    return playerReady && loadedId ? player.getCurrentTime() : expected(room.music);
+    var song = current();
+    var p = song && players[sourceOf(song)];
+    var t = p && p.ready && p.loaded === song.id ? p.time() : null;
+    return t === null ? expected(room.music) : t;
   }
 
   playBtn.addEventListener('click', function () {
@@ -389,49 +512,32 @@
 
   unmuteEl.addEventListener('click', function () {
     unmuteEl.hidden = true;
-    loadedId = null;  // loads the song afresh, now that sound is allowed
+    var song = current();
+    if (song) players[sourceOf(song)].loaded = null;  // loads it afresh, now that sound is allowed
     applyMusic();
   });
 
   document.getElementById('music-add').addEventListener('submit', async function (e) {
     e.preventDefault();
-    var id = videoId(linkInput.value);
-    if (!id) { alert('That doesn\'t look like a YouTube link.'); return; }
+    var song = parseLink(linkInput.value);
+    if (!song) { alert('Paste a YouTube video, or a Spotify song or podcast episode.'); return; }
     linkInput.value = '';
-    var title = 'YouTube video';
+    // Titles come from each site's oEmbed, which pages can read directly
+    var spotify = song.source === 'spotify';
+    var url = spotify
+      ? 'https://open.spotify.com/oembed?url=' + encodeURIComponent('https://open.spotify.com/' + song.id.split(':').slice(1).join('/'))
+      : 'https://noembed.com/embed?url=' + encodeURIComponent('https://www.youtube.com/watch?v=' + song.id);
+    song.title = spotify ? 'Spotify song' : 'YouTube video';
     try {
-      var info = await (await fetch('https://noembed.com/embed?url=' + encodeURIComponent('https://www.youtube.com/watch?v=' + id))).json();
-      if (info.title) title = info.title;
+      var info = await (await fetch(url)).json();
+      if (info.title) song.title = info.title;
     } catch (err) {}
     var m = Object.assign({}, room.music);
     var idle = m.index >= m.queue.length;
-    m.queue = m.queue.concat([{ id: id, title: title }]);
+    m.queue = m.queue.concat([song]);
     if (idle) Object.assign(m, { playing: true, position: 0, at: Date.now() });
     writeMusic(m);
   });
-
-  // The YouTube player, made the first time a room is entered. Its own
-  // controls are off, so every change goes through the buttons and is shared.
-  function loadPlayer() {
-    if (player) { applyMusic(); return; }
-    window.onYouTubeIframeAPIReady = function () {
-      player = new YT.Player('room-player', {
-        width: '100%',
-        height: '100%',
-        playerVars: { controls: 0, disablekb: 1, playsinline: 1, rel: 0 },
-        events: {
-          onReady: function () { playerReady = true; applyMusic(); },
-          onStateChange: function (e) {
-            if (e.data === YT.PlayerState.ENDED && room) skip(room.music.index);
-            if (e.data === YT.PlayerState.PLAYING) unmuteEl.hidden = true;
-          }
-        }
-      });
-    };
-    var script = document.createElement('script');
-    script.src = 'https://www.youtube.com/iframe_api';
-    document.head.appendChild(script);
-  }
 
   /* Keeping up */
 

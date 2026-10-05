@@ -1034,3 +1034,15 @@ a:focus {
 .study-rooms .board-now {
   margin-left: 0;
 }
+
+/* Spotify's compact player, for songs from Spotify */
+.room-player-spotify {
+  height: 80px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.room-player[hidden],
+.room-player-spotify[hidden] {
+  display: none;
+}
