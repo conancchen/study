@@ -1392,6 +1392,7 @@ p.study-time {
   min-height: 36px;
   padding: 6px 14px;
   background: var(--bg);
+  font-size: calc(13px * var(--base-scale, 1) * var(--text-scale, 1));
 }
 
 .request-accept {
