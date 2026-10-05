@@ -136,6 +136,9 @@
       since: now.since ? new Date(now.since).toISOString() : null,
       target_ms: now.target,
       laps: now.laps.slice(-50),
+      room_id: window.studyRoom ? window.studyRoom.id : null,
+      room_name: window.studyRoom ? window.studyRoom.name : null,
+      room_code: window.studyRoom ? window.studyRoom.code : null,
       updated_at: new Date().toISOString()
     };
     if (!PREVIEW) {
@@ -143,8 +146,28 @@
       if (res.error) { console.error(res.error); return; }
     }
     statuses[me.id] = row;
+    announce(row);
     if (rows.length) renderBoard();
   }
+
+  // Rooms (rooms.js) shares this sign-in and these statuses
+  function announce(row) {
+    document.dispatchEvent(new CustomEvent('study:status', { detail: row }));
+  }
+
+  window.studySocial = {
+    db: db,
+    preview: PREVIEW,
+    me: function () { return me; },
+    statuses: function () { return statuses; },
+    pushStatus: pushStatus,
+    signIn: function () { document.getElementById('sign-in').click(); },
+    describe: function (st) {
+      var verb = !st.since ? 'Paused' : st.kind === 'brk' ? 'On break' : 'Studying';
+      return verb + ' · ' + st.title + ' · ' + clock(running(st)) + (st.target_ms ? ' / ' + clock(st.target_ms) : '');
+    },
+    active: active
+  };
 
   // The timer saves in bursts (a lap is a save or two in a row), so the
   // uploads wait for it to settle
@@ -176,6 +199,7 @@
     if (!st.error) {
       statuses = {};
       st.data.forEach(function (row) { statuses[row.user_id] = row; });
+      announce(null);
     }
     renderBoard();
 
@@ -253,8 +277,7 @@
     boardEl.querySelectorAll('.board-now').forEach(function (el) {
       var st = statuses[el.dataset.user];
       if (!st) return;
-      var verb = !st.since ? 'Paused' : st.kind === 'brk' ? 'On break' : 'Studying';
-      el.textContent = verb + ' · ' + st.title + ' · ' + clock(running(st)) + (st.target_ms ? ' / ' + clock(st.target_ms) : '');
+      el.textContent = window.studySocial.describe(st) + (st.room_name ? ' · in ' + st.room_name : '');
     });
   }
 
@@ -358,6 +381,7 @@
       whoEl.textContent = '@you (preview)';
       await pushStatus();
       await refresh();
+      document.dispatchEvent(new CustomEvent('study:signed-in'));
       return;
     }
     try {
@@ -375,6 +399,7 @@
     await sync();
     await refresh();
     listen();
+    document.dispatchEvent(new CustomEvent('study:signed-in'));
   }
 
   // Friends' statuses arrive the moment they change; the database only sends
@@ -387,8 +412,9 @@
         var row = change.new;
         if (!row || !row.user_id) return;
         statuses[row.user_id] = row;
+        announce(row);
+        // Roommates who aren't friends come through too, but stay off the board
         if (rows.some(function (r) { return r.id === row.user_id; })) renderBoard();
-        else refresh();  // someone new, like a friend just added
       })
       .subscribe();
   }
@@ -396,6 +422,7 @@
   function signedOut() {
     me = null;
     if (channel) { db.removeChannel(channel); channel = null; }
+    document.dispatchEvent(new CustomEvent('study:signed-out'));
     signedOutEl.hidden = false;
     signedInEl.hidden = true;
   }

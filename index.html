@@ -169,6 +169,42 @@
   </p>
 </section>
 
+<section class="block study-rooms" id="rooms" hidden>
+  <h2 class="block-label block-label-plain">Rooms</h2>
+  <div id="rooms-signed-out" hidden>
+    <p class="study-chart-caption">Sign in to study in a room with friends and share music.</p>
+    <p class="study-backup"><button class="study-backup-option" id="rooms-sign-in" type="button">Sign in with Google</button></p>
+  </div>
+  <div id="rooms-lobby" hidden>
+    <ul class="board" id="rooms-list"></ul>
+    <p class="study-backup">
+      <button class="study-backup-option" id="room-new" type="button">New room</button>
+      · <button class="study-backup-option" id="room-join" type="button">Join with code</button>
+    </p>
+  </div>
+  <div id="room" hidden>
+    <p class="room-name" id="room-name"></p>
+    <ul class="board" id="room-members"></ul>
+    <div class="room-music">
+      <div class="room-player"><div id="room-player"></div></div>
+      <p class="study-chart-caption" id="room-now"></p>
+      <p class="study-backup">
+        <button class="study-backup-option" id="music-play" type="button">Play</button>
+        · <button class="study-backup-option" id="music-skip" type="button">Skip</button>
+        <button class="study-backup-option music-unmute" id="music-unmute" type="button" hidden>· Click to hear the music</button>
+      </p>
+      <form class="music-add" id="music-add">
+        <input class="music-link" id="music-link" type="text" placeholder="Paste a YouTube link" aria-label="YouTube link to add" autocomplete="off">
+      </form>
+      <ol class="study-laps" id="music-queue"></ol>
+    </div>
+    <p class="study-backup">
+      <button class="study-backup-option" id="room-copy" type="button">Copy room link</button>
+      · <button class="study-backup-option" id="room-leave" type="button">Leave</button>
+    </p>
+  </div>
+</section>
+
 <section class="block study-friends" id="friends" hidden>
   <h2 class="block-label block-label-plain">Friends</h2>
   <div id="friends-signed-out" hidden>
@@ -795,6 +831,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
   <script src="./friends.js"></script>
+  <script src="./rooms.js"></script>
 </body>
 
 </html>

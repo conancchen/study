@@ -948,3 +948,89 @@ a:focus {
     margin: 0;
   }
 }
+
+/* Rooms: the people in a room, then its music */
+.room-name {
+  margin: 0 0 6px;
+  font-weight: 500;
+}
+
+.room-music {
+  margin-top: 16px;
+}
+
+/* The YouTube player, shown small at the top of the music */
+.room-player {
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--toast-bg);
+}
+
+.room-player iframe {
+  display: block;
+  border: 0;
+}
+
+.music-add {
+  margin: 10px 0 6px;
+}
+
+.music-link {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: calc(13px * var(--base-scale, 1) * var(--text-scale, 1));
+  color: var(--text);
+  background: none;
+  border: none;
+  border-bottom: 1px dotted var(--muted);
+  padding: 4px 0;
+  outline: none;
+}
+
+.music-link:focus {
+  border-bottom-style: solid;
+}
+
+.music-current {
+  color: var(--text);
+}
+
+.room-open {
+  font-size: inherit;
+  color: var(--text);
+}
+
+.room-busy::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: var(--study);
+  vertical-align: middle;
+}
+
+/* A click on a text button shouldn't leave a focus ring; a keyboard tab still does */
+.study-backup-option:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Rooms takes the left of the timer, as Friends takes the right */
+@media screen and (min-width: 1200px) {
+  .study-rooms {
+    position: fixed;
+    top: 112px;
+    right: calc(50% + 284px + 24px);
+    width: 280px;
+    max-height: calc(100vh - 160px);
+    overflow-y: auto;
+    margin: 0;
+  }
+}
+
+.study-rooms .board-now {
+  margin-left: 0;
+}
