@@ -58,6 +58,7 @@
   var notifyEl = document.getElementById('friends-notify');
   var notifyCountEl = document.getElementById('notify-count');
   var usernameEl = document.getElementById('username');
+  var displayNameEl = document.getElementById('display-name');
   var accountEl = document.getElementById('settings-account');
   var accountOutEl = document.getElementById('settings-signed-out');
   var signOutEl = document.getElementById('settings-sign-out');
@@ -120,7 +121,7 @@
     });
     keep('study-sent', outgoing.map(function (req) {
       var who = req.receiver || {};
-      return { id: req.addressee, username: who.username, display_name: who.display_name, avatar_url: who.avatar_url };
+      return { id: req.addressee, username: who.username, display_name: who.display_name };
     }));
     keep('study-accepted', accepted);
     return accepted;
@@ -186,6 +187,9 @@
     return key === 'streak' ? value + (value === 1 ? ' day' : ' days') : duration(value);
   }
 
+  // The profile columns anyone signed in can read
+  var PROFILE = 'id, username, display_name';
+
   // A username from the Google email, made unique with digits if taken
   async function makeProfile(user) {
     var meta = user.user_metadata || {};
@@ -196,9 +200,8 @@
       var res = await db.from('profiles').insert({
         id: user.id,
         username: username,
-        display_name: meta.full_name || meta.name || username,
-        avatar_url: meta.avatar_url || null
-      }).select().single();
+        display_name: (meta.full_name || meta.name || username).trim().slice(0, 40)
+      }).select(PROFILE).single();
       if (!res.error) return res.data;
       if (res.error.code !== '23505') throw res.error;  // anything but "taken"
     }
@@ -206,9 +209,13 @@
   }
 
   async function loadProfile(user) {
-    var res = await db.from('profiles').select().eq('id', user.id).maybeSingle();
+    var res = await db.from('profiles').select(PROFILE).eq('id', user.id).maybeSingle();
     if (res.error) throw res.error;
-    return res.data || makeProfile(user);
+    var profile = res.data || await makeProfile(user);
+    // Invite codes aren't readable from profiles, so yours comes on its own
+    var code = await db.rpc('my_invite_code');
+    profile.invite_code = code.data;
+    return profile;
   }
 
   // Uploads every study turn in the local history; ones already up there are
@@ -362,8 +369,8 @@
     // Requests both ways: ones to answer, and ones still waiting on someone
     var pending = await db.from('friendships')
       .select('requester, addressee,'
-        + ' sender:profiles!friendships_requester_fkey(username, display_name, avatar_url),'
-        + ' receiver:profiles!friendships_addressee_fkey(username, display_name, avatar_url)')
+        + ' sender:profiles!friendships_requester_fkey(username, display_name),'
+        + ' receiver:profiles!friendships_addressee_fkey(username, display_name)')
       .eq('accepted', false);
     if (pending.error) console.error(pending.error);
     renderRequests(pending.error ? [] : pending.data);
@@ -401,14 +408,6 @@
       var spot = document.createElement('div');
       spot.className = 'podium-spot podium-' + (i + 1) + (row.id === me.id ? ' board-me' : '');
       spot.title = '@' + row.username;
-      if (row.avatar_url) {
-        var img = document.createElement('img');
-        img.className = 'podium-avatar';
-        img.src = row.avatar_url;
-        img.alt = '';
-        img.referrerPolicy = 'no-referrer';
-        spot.appendChild(img);
-      }
       var name = document.createElement('span');
       name.className = 'podium-name';
       name.textContent = row.id === me.id ? 'You' : row.display_name;
@@ -453,14 +452,6 @@
     rank.className = 'board-rank';
     rank.textContent = i + 1;
     name.appendChild(rank);
-    if (row.avatar_url) {
-      var img = document.createElement('img');
-      img.className = 'board-avatar';
-      img.src = row.avatar_url;
-      img.alt = '';
-      img.referrerPolicy = 'no-referrer';
-      name.appendChild(img);
-    }
     name.appendChild(document.createTextNode(row.id === me.id ? 'You' : row.display_name));
     name.title = '@' + row.username;
     var value = document.createElement('span');
@@ -556,15 +547,6 @@
     return note;
   }
 
-  function avatar(who) {
-    var img = document.createElement('img');
-    img.className = 'board-avatar';
-    img.src = who.avatar_url;
-    img.alt = '';
-    img.referrerPolicy = 'no-referrer';
-    return img;
-  }
-
   // Requests to you come first, each a card with buttons big enough to hit
   // on a phone; ones you've sent sit under them until they're answered
   function renderRequests(pending) {
@@ -575,7 +557,6 @@
       var who = req.sender || {};
       var li = document.createElement('li');
       li.className = 'request';
-      if (who.avatar_url) li.appendChild(avatar(who)).classList.add('request-avatar');
       var text = document.createElement('div');
       text.className = 'request-who';
       var name = document.createElement('div');
@@ -623,7 +604,6 @@
     accepted.forEach(function (who) {
       var li = document.createElement('li');
       li.className = 'request';
-      if (who.avatar_url) li.appendChild(avatar(who)).classList.add('request-avatar');
       var text = document.createElement('div');
       text.className = 'request-who';
       var name = document.createElement('div');
@@ -740,6 +720,7 @@
       accountOutEl.hidden = true;
       signOutEl.hidden = false;
       usernameEl.value = me.username;
+      displayNameEl.value = me.display_name;
       await pushStatus();
       await refresh();
       document.dispatchEvent(new CustomEvent('study:signed-in'));
@@ -759,6 +740,7 @@
     accountOutEl.hidden = true;
     signOutEl.hidden = false;
     usernameEl.value = me.username;
+    displayNameEl.value = me.display_name;
     await useInvite();
     await pushStatus();
     await sync();
@@ -838,6 +820,7 @@
   // Copies the link, and if the browser won't allow that, puts it on the
   // page to copy by hand
   document.getElementById('invite').addEventListener('click', function () {
+    if (!me.invite_code) { toast('Couldn\'t get your invite link'); return; }
     var link = location.origin + location.pathname + '?invite=' + me.invite_code;
     var shown = this.parentNode.nextElementSibling;
     if (shown && shown.classList.contains('invite-link')) shown.remove();
@@ -887,18 +870,38 @@
     var name = usernameEl.value.trim().replace(/^@/, '').toLowerCase();
     if (PREVIEW) { usernameEl.value = me.username; toast('Not available in preview'); return; }
     if (!name || name === me.username) { usernameEl.value = me.username; return; }
-    var res = await db.from('profiles').update({ username: name }).eq('id', me.id).select().single();
+    var res = await db.from('profiles').update({ username: name }).eq('id', me.id).select(PROFILE).single();
     if (res.error) {
       toast(res.error.code === '23505' ? '@' + name + ' is taken' : 'Usernames are 3–20 letters, numbers or _');
       usernameEl.value = me.username;
       return;
     }
-    me = res.data;
+    me.username = res.data.username;
     usernameEl.value = me.username;
     toast('Username saved');
   });
   usernameEl.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') usernameEl.blur();
+  });
+
+  // The name friends see, changed in settings the same way
+  displayNameEl.addEventListener('change', async function () {
+    var name = displayNameEl.value.trim().replace(/\s+/g, ' ');
+    if (PREVIEW) { displayNameEl.value = me.display_name; toast('Not available in preview'); return; }
+    if (!name || name === me.display_name) { displayNameEl.value = me.display_name; return; }
+    var res = await db.from('profiles').update({ display_name: name }).eq('id', me.id).select(PROFILE).single();
+    if (res.error) {
+      toast('Names are 1–40 characters');
+      displayNameEl.value = me.display_name;
+      return;
+    }
+    me.display_name = res.data.display_name;
+    displayNameEl.value = me.display_name;
+    toast('Name saved');
+    refresh();
+  });
+  displayNameEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') displayNameEl.blur();
   });
 
   sortEl.addEventListener('click', function (e) {

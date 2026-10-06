@@ -943,18 +943,6 @@ p.study-now {
   text-align: center;
 }
 
-.podium-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  margin-bottom: 2px;
-}
-
-.podium-1 .podium-avatar {
-  width: 46px;
-  height: 46px;
-}
-
 .podium-name {
   max-width: 100%;
   overflow: hidden;
@@ -1007,14 +995,6 @@ p.study-now {
   min-width: 1.4em;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-}
-
-.board-avatar {
-  width: 1.1em;
-  height: 1.1em;
-  border-radius: 50%;
-  margin-right: 0.4em;
-  vertical-align: -0.15em;
 }
 
 .board-me {
@@ -1303,13 +1283,6 @@ p.study-now {
   margin: 0 0 6px;
   background: var(--chip-bg);
   border-radius: 8px;
-}
-
-.request .request-avatar {
-  width: 24px;
-  height: 24px;
-  margin: 0;
-  flex: none;
 }
 
 .request-who {

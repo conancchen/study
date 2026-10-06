@@ -10,6 +10,13 @@ create table if not exists profiles (
   invite_code text unique not null default substr(md5(random()::text), 1, 10),
   created_at timestamptz not null default now()
 );
+-- Names are typed in settings now, so they're kept to a sensible length
+-- (not valid: only checked from here on, so long Google names already saved stay)
+alter table profiles drop constraint if exists display_name_length;
+alter table profiles add constraint display_name_length
+  check (length(trim(display_name)) between 1 and 40) not valid;
+-- Google profile photos aren't kept; avatar_url stays empty
+update profiles set avatar_url = null where avatar_url is not null;
 
 -- Every finished study turn; started_at is unique per person, so the page can
 -- upload its whole local history again without making duplicates
@@ -70,6 +77,19 @@ drop policy if exists "profiles insert own" on profiles;
 create policy "profiles insert own" on profiles for insert to authenticated with check (id = auth.uid());
 drop policy if exists "profiles update own" on profiles;
 create policy "profiles update own" on profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
+-- Only these columns can be read or written directly. Invite codes stay out of
+-- reach, since anyone holding one can become that person's friend; your own
+-- comes from my_invite_code()
+revoke select, insert, update on profiles from anon, authenticated;
+grant select (id, username, display_name, avatar_url, created_at) on profiles to authenticated;
+grant insert (id, username, display_name) on profiles to authenticated;
+grant update (username, display_name) on profiles to authenticated;
+
+create or replace function my_invite_code() returns text
+language sql stable security definer set search_path = public as $$
+  select invite_code from profiles where id = auth.uid();
+$$;
+grant execute on function my_invite_code() to authenticated;
 
 -- Sessions: your own, plus your friends'
 drop policy if exists "sessions read" on sessions;
@@ -113,6 +133,10 @@ create policy "friendships request" on friendships for insert to authenticated
 drop policy if exists "friendships accept" on friendships;
 create policy "friendships accept" on friendships for update to authenticated
   using (addressee = auth.uid()) with check (addressee = auth.uid());
+-- Accepting only flips accepted; without this, the asked side could rewrite
+-- requester and make themselves friends with anyone
+revoke update on friendships from anon, authenticated;
+grant update (accepted) on friendships to authenticated;
 drop policy if exists "friendships remove" on friendships;
 create policy "friendships remove" on friendships for delete to authenticated
   using (auth.uid() in (requester, addressee));
