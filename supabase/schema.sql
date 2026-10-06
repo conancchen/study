@@ -98,9 +98,10 @@ drop function if exists shares_room(uuid, uuid);
 alter table status drop column if exists room_id;
 alter table status drop column if exists room_name;
 alter table status drop column if exists room_code;
+-- (the tables before is_member, since their policies use it)
 drop table if exists room_members;
-drop function if exists is_member(uuid, uuid);
 drop table if exists rooms;
+drop function if exists is_member(uuid, uuid);
 
 -- Friendships: either side can see and remove one; only the asked side accepts
 drop policy if exists "friendships read" on friendships;
@@ -133,16 +134,18 @@ begin
 end;
 $$;
 
--- You and your friends, with study time today, this week (from Monday), all
--- time, and the current streak, all reckoned in the caller's time zone
-create or replace function leaderboard(tz text) returns table (
+-- You and your friends (or, with everyone, every profile), with study time
+-- today, this week (from Monday), all time, and the current streak, all
+-- reckoned in the caller's time zone
+drop function if exists leaderboard(text);
+create or replace function leaderboard(tz text, everyone boolean default false) returns table (
   id uuid, username text, display_name text, avatar_url text,
   today_ms bigint, week_ms bigint, all_ms bigint, streak int
 )
 language sql stable security definer set search_path = public as $$
   with people as (
     select p.* from profiles p
-    where p.id = auth.uid() or are_friends(auth.uid(), p.id)
+    where everyone or p.id = auth.uid() or are_friends(auth.uid(), p.id)
   ),
   local as (
     select s.user_id, s.ms, (s.started_at at time zone tz)::date as day
@@ -180,7 +183,7 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 grant execute on function accept_invite(text) to authenticated;
-grant execute on function leaderboard(text) to authenticated;
+grant execute on function leaderboard(text, boolean) to authenticated;
 
 -- Status, finished turns and friend requests are pushed to friends' pages as
 -- they happen, so the board and requests update live

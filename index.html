@@ -120,7 +120,7 @@
     </script>
 
     <section class="block study">
-  <p class="study-heading"><span class="study-phase" id="phase">Session 1</span></p>
+  <p class="study-heading"><span class="study-phase" id="phase">Session 1</span><span class="study-at"> – </span><input class="study-place" id="place" type="text" maxlength="40" placeholder="where?" aria-label="Where you're studying" autocomplete="off" spellcheck="false"></p>
   <p class="study-time"><span id="time">0:00</span></p>
   <p class="study-now" id="clock-now"></p>
   <div class="study-clock">
@@ -201,6 +201,10 @@
   </div>
   <div id="friends-signed-in" hidden>
     <ul class="board requests" id="requests" hidden></ul>
+    <p class="study-backup board-sort" id="board-scope">
+      <button class="study-backup-option" data-scope="friends" type="button">Friends</button>
+      · <button class="study-backup-option" data-scope="global" type="button">Global</button>
+    </p>
     <p class="study-backup board-sort" id="board-sort">
       <button class="study-backup-option" data-sort="today" type="button">Today</button>
       · <button class="study-backup-option" data-sort="week" type="button">This week</button>
@@ -214,6 +218,11 @@
     </p>
   </div>
 </section>
+
+<section class="block study-map" id="map" hidden>
+  <h2 class="block-label block-label-plain">Map</h2>
+  <div class="friends-map" id="friends-map"></div>
+</section>
 </div>
 </aside>
 
@@ -226,6 +235,7 @@
         <div class="row"><span>Username</span><span class="study-lengths">@<input class="study-length settings-field" id="username" type="text" maxlength="20" autocomplete="off" spellcheck="false" aria-label="Username"></span></div>
       </div>
     </div>
+    <div class="row"><span>Default location</span><input class="study-length settings-field" id="home-place" type="text" maxlength="40" placeholder="none" autocomplete="off" spellcheck="false" aria-label="Default location"></div>
 
     <p class="study-backup">
       <button class="study-backup-option" id="export" type="button">Export stats</button>
@@ -242,6 +252,7 @@
     <p class="settings-done"><button class="study-button" id="settings-done" type="button">Done</button></p>
   </dialog>
 
+<script src="./places.js"></script>
 <script>
   // A stopwatch that runs in turns: a study session, then a break, then the
   // next session, and so on. The lap button closes the current turn and starts
@@ -264,7 +275,9 @@
   // signed in, Friends (friends.js) copies the study turns up to compare and
   // shows friends what the clock is doing. Any turn, the current one included,
   // can be renamed by clicking its underlined name and typing straight into it;
-  // clearing the name puts the default back. Any finished turn can be deleted
+  // clearing the name puts the default back. Under the name is where you're
+  // studying: it goes on the turn on the clock and every turn after, until
+  // it's changed, and Friends shows it (and pins it on the map). Any finished turn can be deleted
   // with the × after its time, on the list or in Settings' Edit sessions,
   // which takes it out of the stats and off the leaderboard too.
   (function () {
@@ -289,7 +302,9 @@
     // seen: while running, the last moment the page was known to be open
     var state = load(KEY) || fresh();
 
-    // mode: 'stopwatch' or 'timer'; minutes: each kind's length in timer mode
+    // mode: 'stopwatch' or 'timer'; minutes: each kind's length in timer mode;
+    // place: where you're studying now, if you've said; home: the default
+    // location, set in settings, that a fresh list starts at
     var settings = load(SETTINGS_KEY) || { mode: 'stopwatch', minutes: { study: 50, brk: 10 } };
 
     // history: every finished turn ever, oldest first, as { kind, ms, at }.
@@ -309,14 +324,19 @@
     var modeButtons = { stopwatch: document.getElementById('mode-stopwatch'), timer: document.getElementById('mode-timer') };
     var timerSettingsEl = document.getElementById('timer-settings');
     var lengthInputs = { study: document.getElementById('length-study'), brk: document.getElementById('length-brk') };
+    var placeInput = document.getElementById('place');
+    var homeInput = document.getElementById('home-place');
 
     function fresh() {
       return { laps: [], current: next('study'), since: null };
     }
 
+    // A new turn, at wherever you last said you were
     function next(kind, at) {
       var turn = { kind: kind, ms: 0 };
       if (at) turn.at = at;
+      var place = settings && (settings.place || settings.home);
+      if (place) turn.place = place;
       return turn;
     }
 
@@ -331,7 +351,7 @@
         localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
       } catch (e) {}
       // Lets Friends upload new turns and show what the clock is doing
-      var laps = state.laps.map(function (t, i) { return { kind: t.kind, title: title(t, i), ms: t.ms, at: t.at }; });
+      var laps = state.laps.map(function (t, i) { return { kind: t.kind, title: title(t, i), ms: t.ms, at: t.at, place: t.place }; });
       window.studyNow = {
         kind: state.current.kind,
         title: title(state.current, state.laps.length),
@@ -339,6 +359,7 @@
         ms: state.current.ms,
         since: state.since,
         target: timed() ? target(state.current.kind) : null,
+        place: state.current.place || settings.place || null,
         laps: laps
       };
       document.dispatchEvent(new CustomEvent('study:save', { detail: window.studyNow }));
@@ -450,6 +471,38 @@
       });
     }
 
+    // System notifications, asked for on the first press of Start: one when
+    // a countdown runs out, and while a turn runs on, one every hour of
+    // studying or every 15 minutes of break
+    var NUDGE = { study: 3600000, brk: 15 * 60000 };
+    function askToNotify() {
+      if (window.Notification && Notification.permission === 'default') {
+        try { Notification.requestPermission(); } catch (e) {}
+      }
+    }
+    function notify(text) {
+      if (!window.Notification || Notification.permission !== 'granted') return;
+      try {
+        new Notification('Study With Me', { body: text, tag: 'study', icon: 'images/favicon-192.png' });
+      } catch (e) {}  // (some phones only allow them from a service worker)
+    }
+    function minutes(ms) {
+      var m = Math.round(ms / 60000);
+      return m % 60 ? m + ' min' : m / 60 + (m === 60 ? ' hour' : ' hours');
+    }
+
+    // How many nudges the turn on the clock has had; a turn found already
+    // under way (on arrival) counts the ones it's past as given
+    var nudged = { turn: null, n: 0 };
+    function nudge() {
+      var turn = state.current;
+      var n = Math.floor(elapsed() / NUDGE[turn.kind]);
+      if (nudged.turn !== turn) nudged = { turn: turn, n: n };
+      if (n <= nudged.n) return;
+      nudged.n = n;
+      if (state.since) notify((turn.kind === 'study' ? 'Studying for ' : 'On break for ') + minutes(n * NUDGE[turn.kind]));
+    }
+
     // In timer mode, closes every turn whose countdown has run out (more than
     // one if the tab was away), each ending exactly on time, with the next
     // starting where it ended. Chimes only if the last one just ran out.
@@ -467,16 +520,22 @@
         state.since = ended;
       }
       if (ended === null) return;
-      if (Date.now() - ended < 5000) chime();
+      if (Date.now() - ended < 5000) {
+        chime();
+        notify(state.current.kind === 'brk'
+          ? 'Session done — time for a ' + minutes(target('brk')) + ' break'
+          : 'Break\'s over — back to studying');
+      }
       save();
       render();
     }
 
-    // " – 1:23 PM" after a name, for when the turn started
+    // " – 1:23 PM · Firestone Library" after a name, for when and where the
+    // turn started
     function startedAt(turn) {
-      return turn.at
+      return (turn.at
         ? ' – ' + new Date(turn.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-        : '';
+        : '') + (turn.place ? ' · ' + turn.place : '');
     }
 
     function tick() {
@@ -515,6 +574,9 @@
       for (var k in lengthInputs) {
         if (document.activeElement !== lengthInputs[k]) lengthInputs[k].value = settings.minutes[k];
       }
+      if (document.activeElement !== placeInput) placeInput.value = state.current.place || '';
+      if (document.activeElement !== homeInput) homeInput.value = settings.home || '';
+      fitPlace();
 
       lapsEl.innerHTML = '';
       for (var i = state.laps.length - 1; i >= 0; i--) {
@@ -622,7 +684,9 @@
 
     // Just what the stats need from a turn
     function record(turn) {
-      return { kind: turn.kind, ms: turn.ms, at: turn.at };
+      var r = { kind: turn.kind, ms: turn.ms, at: turn.at };
+      if (turn.place) r.place = turn.place;
+      return r;
     }
 
     // "2h 05m", "35m", or "40s" under a minute
@@ -757,6 +821,7 @@
         state.since = null;
       } else {
         unlockAudio();
+        askToNotify();
         state.since = state.seen = Date.now();
         if (!state.current.at) state.current.at = state.since;
       }
@@ -799,6 +864,7 @@
     function reset() {
       if (state.laps.length && !confirmClick(resetBtn, 'Clear list?')) return;
       if (elapsed()) history.push(record({ kind: state.current.kind, ms: elapsed(), at: state.current.at }));
+      delete settings.place;  // a fresh list starts back at the default location
       state = fresh();
       save();
       render();
@@ -835,6 +901,66 @@
       });
     });
 
+    // The place sits in the heading's line, as wide as what's in it
+    var measure = document.createElement('canvas').getContext('2d');
+    function fitPlace() {
+      measure.font = getComputedStyle(placeInput).font;
+      placeInput.style.width = Math.ceil(measure.measureText(placeInput.value || placeInput.placeholder).width) + 2 + 'px';
+    }
+
+    // Typing the start of a known place fills in the rest, selected, so
+    // carrying on typing replaces it, Backspace drops it, and Enter or Tab
+    // keeps it. Anything else typed stays exactly as typed.
+    function completes(input, after) {
+      input.addEventListener('input', function (e) {
+        var typed = input.value;
+        if (e.inputType && e.inputType.indexOf('insert') === 0 && typed.trim() && input.selectionEnd === typed.length) {
+          var lower = typed.toLowerCase();
+          var match = window.STUDY_PLACE_ORDER.filter(function (name) { return name.toLowerCase().indexOf(lower) === 0; })[0];
+          if (match && match.length > typed.length) {
+            input.value = typed + match.slice(typed.length);
+            input.setSelectionRange(typed.length, match.length);
+          }
+        }
+        if (after) after();
+      });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') input.blur();
+        else if (e.key === 'Tab' && input.selectionStart !== input.selectionEnd) {
+          e.preventDefault();
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+      });
+    }
+    completes(placeInput, fitPlace);
+    completes(homeInput);
+
+    // A known place takes its listed spelling, so the map can find it
+    function tidyPlace(text) {
+      var place = text.replace(/\s+/g, ' ').trim().slice(0, 40);
+      Object.keys(window.STUDY_PLACES).forEach(function (name) {
+        if (name.toLowerCase() === place.toLowerCase()) place = name;
+      });
+      return place;
+    }
+
+    placeInput.addEventListener('change', function () {
+      var place = tidyPlace(placeInput.value);
+      if (place) { settings.place = place; state.current.place = place; }
+      else { delete settings.place; delete state.current.place; }
+      save();
+      render();
+    });
+
+    // A new default also goes on the turn on the clock, if it has no place yet
+    homeInput.addEventListener('change', function () {
+      var home = tidyPlace(homeInput.value);
+      if (home) settings.home = home; else delete settings.home;
+      if (home && !state.current.place) state.current.place = home;
+      save();
+      render();
+    });
+
     Object.keys(lengthInputs).forEach(function (kind) {
       var input = lengthInputs[kind];
       input.addEventListener('change', function () {
@@ -867,7 +993,7 @@
       requestAnimationFrame(frame);
     })();
     // Frames stop in a background tab, so this keeps countdowns ending on time
-    setInterval(advance, 1000);
+    setInterval(function () { advance(); nudge(); }, 1000);
     // Keeps today's total and the chart moving while the clock runs
     setInterval(function () { if (state.since) stats(); }, 15000);
   })();
@@ -1007,11 +1133,11 @@
       input.onblur = function () { if (!input.value.trim()) form.remove(); };
     }
 
-    // Stats and Ambient on the left, Friends on the right, sit in sidebars
+    // Stats and Ambient on the left, Friends and Map on the right, sit in sidebars
     // that slide off to the edges of the screen, both at once, with a click
     // on the three bars at the top left of the middle column. With room beside the clock they
     // start open on every visit. On a narrow screen
-    // Friends moves into the left one, which starts shut and floats over the
+    // Friends and Map move into the left one, which starts shut and floats over the
     // page when opened; a click elsewhere or Escape puts it away again.
     (function () {
       var wide = window.matchMedia('(min-width: 1200px)');
@@ -1019,6 +1145,7 @@
       var left = document.getElementById('side-left');
       var right = document.getElementById('side-right');
       var friends = document.getElementById('friends');
+      var map = document.getElementById('map');
 
       function set(open) {
         [left, right].forEach(function (side) {
@@ -1027,10 +1154,12 @@
         });
         button.setAttribute('aria-expanded', open);
         button.classList.toggle('active', open);
+        document.dispatchEvent(new CustomEvent('study:sides', { detail: { open: open } }));
       }
       function reset() {
         if (wide.matches) right.querySelector('.study-side-inner').appendChild(friends);
         else left.querySelector('.study-side-inner').prepend(friends);
+        friends.after(map);
         set(wide.matches);
       }
 
@@ -1084,6 +1213,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
   <script src="./friends.js"></script>
+  <script src="./map.js"></script>
 </body>
 
 </html>

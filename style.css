@@ -501,8 +501,43 @@ a:focus {
   line-height: 1.3;
 }
 
-.study-phase {
+.study-phase,
+.study-heading .study-at {
   color: inherit;
+}
+
+.study-heading .study-at {
+  padding: 0 0.15em;
+}
+
+/* Where you're studying, typed straight into the heading like the name */
+.study-place {
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  outline: none;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--underline);
+  text-underline-offset: 4px;
+}
+
+/* The filled-in rest of a place shows as faint text rather than a
+   highlighted selection */
+.study-place::selection {
+  color: var(--muted);
+  background: transparent;
+}
+
+.study-place::placeholder {
+  color: var(--muted);
+}
+
+.study-place:hover {
+  text-decoration-color: currentColor;
 }
 
 /* The clock's readout, on its own line under the heading */
@@ -1433,3 +1468,207 @@ p.study-now {
 .study-history-none {
   color: var(--muted);
 }
+
+/* Map, its own section under Friends, in the same sidebar: the campus
+   drawn flat, in the page's own colors, with friends pinned where they
+   study */
+:root {
+  --map-land: #efeee9;
+  --map-grounds: #f6f5f1;
+  --map-green: #e3e9dc;
+  --map-wood: #d9e2d1;
+  --map-field: #dbe5d3;
+  --map-water: #d6e1ea;
+  --map-parking: #e8e7e2;
+  --map-path: #dfddd6;
+  --map-road: #ffffff;
+  --map-building: #d5d3cb;
+}
+
+:root[data-theme=dark] {
+  --map-land: #151514;
+  --map-grounds: #1a1a19;
+  --map-green: #1b211b;
+  --map-wood: #19201a;
+  --map-field: #1d251d;
+  --map-water: #17202a;
+  --map-parking: #1f1f1e;
+  --map-path: #262624;
+  --map-road: #2e2e2c;
+  --map-building: #35352f;
+}
+
+.friends-map {
+  position: relative;
+  height: 260px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--map-land);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.friends-map.map-dragging {
+  cursor: grabbing;
+}
+
+.map-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.map-svg path {
+  vector-effect: non-scaling-stroke;
+}
+
+.map-grounds {
+  fill: var(--map-grounds);
+}
+
+.map-green {
+  fill: var(--map-green);
+}
+
+.map-wood {
+  fill: var(--map-wood);
+}
+
+.map-field {
+  fill: var(--map-field);
+}
+
+.map-water {
+  fill: var(--map-water);
+}
+
+.map-parking {
+  fill: var(--map-parking);
+}
+
+.map-drive {
+  fill: none;
+  stroke: var(--map-road);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-path {
+  fill: none;
+  stroke: var(--map-path);
+  stroke-width: 1;
+}
+
+.map-road {
+  fill: none;
+  stroke: var(--map-road);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-building {
+  fill: var(--map-building);
+}
+
+.map-pins {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* A dot in the turn's color, with the names above it */
+.map-pin {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  padding: 0;
+  border: 2px solid var(--map-land);
+  border-radius: 50%;
+  background: var(--study);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.map-pin-break {
+  background: var(--break);
+}
+
+.map-label {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  white-space: nowrap;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+
+.map-card {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  cursor: default;
+}
+
+.map-card strong {
+  display: block;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.map-card[hidden] {
+  display: none;
+}
+
+.map-zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.map-zoom button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.map-zoom button + button {
+  border-top: 1px solid var(--rule);
+}
+
+.map-zoom button:hover {
+  color: var(--text);
+}
+

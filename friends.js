@@ -41,6 +41,7 @@
   var db = configured ? window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey) : null;
   var me = null;  // the signed-in profile
   var sort = 'week';
+  var scope = 'friends';  // or 'global': everyone, not just friends
   var rows = [];
   var statuses = {};  // each person's timer right now, by user id
   var opened = {};  // board entries left open, by user id
@@ -52,6 +53,7 @@
   var signedInEl = document.getElementById('friends-signed-in');
   var boardEl = document.getElementById('board');
   var sortEl = document.getElementById('board-sort');
+  var scopeEl = document.getElementById('board-scope');
   var requestsEl = document.getElementById('requests');
   var notifyEl = document.getElementById('friends-notify');
   var notifyCountEl = document.getElementById('notify-count');
@@ -266,14 +268,27 @@
       since: now.since ? new Date(now.since).toISOString() : null,
       target_ms: now.target,
       laps: now.laps.slice(-50),
+      place: now.place,
       updated_at: new Date().toISOString()
     };
     if (!PREVIEW) {
       var res = await db.from('status').upsert(row);
+      // Until the place column is added (supabase/schema.sql), the rest still goes up
+      if (res.error && res.error.code === 'PGRST204') {
+        var rest = Object.assign({}, row);
+        delete rest.place;
+        res = await db.from('status').upsert(rest);
+      }
       if (res.error) { console.error(res.error); return; }
     }
     statuses[me.id] = row;
+    announce(row);
     if (rows.length) renderBoard();
+  }
+
+  // The map (map.js) shares this sign-in and these statuses
+  function announce(row) {
+    document.dispatchEvent(new CustomEvent('study:status', { detail: row }));
   }
 
   window.studySocial = {
@@ -284,9 +299,10 @@
     friends: function () { return rows; },  // you included, as on the board
     pushStatus: pushStatus,
     signIn: function () { document.getElementById('sign-in').click(); },
-    // What someone's doing, e.g. "Studying"
+    // What someone's doing and where, e.g. "Studying · Firestone Library"
     describe: function (st) {
-      return !st.since ? 'Paused' : st.kind === 'brk' ? 'On break' : 'Studying';
+      var verb = !st.since ? 'Paused' : st.kind === 'brk' ? 'On break' : 'Studying';
+      return verb + (st.place ? ' · ' + st.place : '');
     },
     active: active
   };
@@ -318,13 +334,16 @@
       renderRequests(demoPending);
       return;
     }
-    var board = await db.rpc('leaderboard', { tz: TZ });
+    // (everyone only when asked for, so the friends board still works on a
+    // database that hasn't had the global one added yet)
+    var board = await db.rpc('leaderboard', scope === 'global' ? { tz: TZ, everyone: true } : { tz: TZ });
     if (board.error) { console.error(board.error); return; }
     rows = board.data;
     var st = await db.from('status').select();
     if (!st.error) {
       statuses = {};
       st.data.forEach(function (row) { statuses[row.user_id] = row; });
+      announce(null);
     }
     renderBoard();
     document.dispatchEvent(new CustomEvent('study:friends'));
@@ -376,16 +395,21 @@
       line.appendChild(value);
       summary.appendChild(line);
 
-      // Everyone gets a line, so who's studying and who isn't reads at a glance
+      // Every friend gets a line, so who's studying and who isn't reads at a
+      // glance; on the global board, strangers' clocks stay private (the
+      // database only hands over friends' statuses anyway)
       var st = status(row.id);
-      var now = document.createElement('p');
-      now.className = !active(st) ? 'board-now board-now-idle'
-        : 'board-now' + (st.kind === 'brk' ? ' board-now-break' : '') + (st.since ? ' board-now-running' : '');
-      now.dataset.user = row.id;
-      summary.appendChild(now);
+      var mine = scope === 'friends' || row.id === me.id || !!statuses[row.id];
+      if (mine) {
+        var now = document.createElement('p');
+        now.className = !active(st) ? 'board-now board-now-idle'
+          : 'board-now' + (st.kind === 'brk' ? ' board-now-break' : '') + (st.since ? ' board-now-running' : '');
+        now.dataset.user = row.id;
+        summary.appendChild(now);
+      }
       entry.appendChild(summary);
       entry.appendChild(statsNote(row));
-      entry.appendChild(turnsNote(st));
+      if (mine) entry.appendChild(turnsNote(st));
       li.appendChild(entry);
       boardEl.appendChild(li);
     });
@@ -393,6 +417,9 @@
 
     Object.keys(SORTS).forEach(function (key) {
       sortEl.querySelector('[data-sort="' + key + '"]').classList.toggle('active', key === sort);
+    });
+    scopeEl.querySelectorAll('[data-scope]').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.scope === scope);
     });
   }
 
@@ -451,10 +478,11 @@
       name.className = 'study-name';
       name.textContent = lap.title;
       label.appendChild(name);
-      if (lap.at) {
+      if (lap.at || lap.place) {
         var at = document.createElement('span');
         at.className = 'study-at';
-        at.textContent = ' · ' + new Date(lap.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        at.textContent = (lap.at ? ' · ' + new Date(lap.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '')
+          + (lap.place ? ' · ' + lap.place : '');
         label.appendChild(at);
       }
       var time = document.createElement('span');
@@ -701,6 +729,7 @@
         var row = change.new;
         if (!row || !row.user_id) return;
         statuses[row.user_id] = row;
+        announce(row);
         if (rows.some(function (r) { return r.id === row.user_id; })) renderBoard();
         else refresh();  // someone new, like a friend just added
       })
@@ -817,6 +846,13 @@
     if (!btn) return;
     sort = btn.dataset.sort;
     renderBoard();
+  });
+
+  scopeEl.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-scope]');
+    if (!btn || btn.dataset.scope === scope) return;
+    scope = btn.dataset.scope;
+    refresh();
   });
 
   // The timer fires this every time it saves
