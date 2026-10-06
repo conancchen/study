@@ -451,7 +451,7 @@
     name.className = 'row-label';
     var rank = document.createElement('span');
     rank.className = 'board-rank';
-    rank.appendChild(i < 3 ? medal(i) : document.createTextNode(i + 1));
+    rank.textContent = i + 1;
     name.appendChild(rank);
     if (row.avatar_url) {
       var img = document.createElement('img');

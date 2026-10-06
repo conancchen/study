@@ -944,15 +944,15 @@ p.study-now {
 }
 
 .podium-avatar {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   margin-bottom: 2px;
 }
 
 .podium-1 .podium-avatar {
-  width: 36px;
-  height: 36px;
+  width: 46px;
+  height: 46px;
 }
 
 .podium-name {
@@ -974,26 +974,26 @@ p.study-now {
   align-items: flex-start;
   justify-content: center;
   margin-top: 4px;
-  padding-top: 6px;
+  padding-top: 8px;
   border-radius: 6px 6px 0 0;
   background: var(--chip-bg);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 
-.podium-1 .podium-step { height: 56px; }
-.podium-2 .podium-step { height: 40px; }
-.podium-3 .podium-step { height: 28px; }
+.podium-1 .podium-step { height: 80px; }
+.podium-2 .podium-step { height: 58px; }
+.podium-3 .podium-step { height: 42px; }
 
 .podium-step .medal {
-  font-size: 20px;
+  font-size: 17px;
 }
 
 .podium-1 .podium-step .medal {
-  font-size: 24px;
+  font-size: 20px;
 }
 
-/* The top 3 get medals, on the podium and the board */
+/* The podium's top 3 get medals */
 .medal {
   line-height: 1;
 }
