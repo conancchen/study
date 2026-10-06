@@ -28,6 +28,7 @@
   document.getElementById('settings-account-block').hidden = false;
 
   var HISTORY_KEY = 'study-history';
+  var FORGOTTEN_KEY = 'study-forgotten';  // deleted turns, to take down
   var INVITE_KEY = 'study-invite';
   var TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
   var SORTS = {
@@ -206,17 +207,50 @@
   async function sync() {
     if (PREVIEW) return refresh();
     if (!me) return;
+    var removed = await unload();
     var history;
     try { history = JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch (e) { history = []; }
+    var forgotten = recallForgotten();
     var turns = history
-      .filter(function (t) { return t.kind === 'study' && t.ms > 0 && t.at && !uploaded[t.at]; })
+      .filter(function (t) { return t.kind === 'study' && t.ms > 0 && t.at && !uploaded[t.at] && forgotten.indexOf(t.at) < 0; })
       .map(function (t) { return { started_at: new Date(t.at).toISOString(), ms: Math.min(Math.round(t.ms), 86400000) }; });
     for (var i = 0; i < turns.length; i += 500) {
       var res = await db.from('sessions').upsert(turns.slice(i, i + 500), { onConflict: 'user_id,started_at', ignoreDuplicates: true });
       if (res.error) { console.error(res.error); return; }
     }
     history.forEach(function (t) { if (t.at) uploaded[t.at] = true; });
-    if (turns.length) await refresh();
+    if (turns.length || removed) await refresh();
+  }
+
+  function recallForgotten() {
+    try { return JSON.parse(localStorage.getItem(FORGOTTEN_KEY)) || []; } catch (e) { return []; }
+  }
+
+  // Takes the turns deleted on the timer out of the database, and lets them
+  // go from the list once they're confirmed gone; ones deleted while signed
+  // out, or that the database wouldn't let go, wait here for the next try.
+  // True if any were taken out.
+  var warnedStuck = false;
+  async function unload() {
+    var forgotten = recallForgotten();
+    if (!forgotten.length) return false;
+    var times = forgotten.map(function (at) { return new Date(at).toISOString(); });
+    var res = await db.from('sessions').delete().eq('user_id', me.id).in('started_at', times);
+    if (res.error) { console.error(res.error); return false; }
+    // A delete the database's rules don't allow fails without an error, so
+    // what's still there is looked up
+    var check = await db.from('sessions').select('started_at').eq('user_id', me.id).in('started_at', times);
+    if (check.error) { console.error(check.error); return false; }
+    var stuck = check.data.map(function (row) { return Date.parse(row.started_at); });
+    var done = forgotten.filter(function (at) { return stuck.indexOf(at) < 0; });
+    var left = recallForgotten().filter(function (at) { return done.indexOf(at) < 0; });
+    try { localStorage.setItem(FORGOTTEN_KEY, JSON.stringify(left)); } catch (e) {}
+    if (stuck.length && !warnedStuck) {
+      warnedStuck = true;
+      console.error('Sessions not deleted; is the "sessions delete own" policy from schema.sql set up?');
+      toast('Couldn\'t take deleted sessions off the leaderboard');
+    }
+    return done.length > 0;
   }
 
   // Writes where the clock stands, from what the timer last saved
@@ -660,8 +694,9 @@
       .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, function () {
         refresh();
       })
-      // A friend's finished turn landing moves their totals
+      // A friend's finished turn landing, or one deleted, moves their totals
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sessions' }, soon)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'sessions' }, soon)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'status' }, function (change) {
         var row = change.new;
         if (!row || !row.user_id) return;

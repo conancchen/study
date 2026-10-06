@@ -232,6 +232,10 @@
       · <button class="study-backup-option" id="import" type="button">Import stats</button>
       <input id="import-file" type="file" accept="application/json,.json" hidden>
     </p>
+    <details class="settings-history" id="history">
+      <summary class="study-backup settings-line"><span class="study-backup-option">Edit sessions</span></summary>
+      <ol class="study-laps" id="history-list"></ol>
+    </details>
     <p class="study-backup settings-line"><button class="study-backup-option" id="reset-stats" type="button">Reset stats</button></p>
     <p class="study-backup settings-line" id="settings-sign-out" hidden><button class="study-backup-option" id="sign-out" type="button">Sign out</button></p>
 
@@ -260,13 +264,18 @@
   // signed in, Friends (friends.js) copies the study turns up to compare and
   // shows friends what the clock is doing. Any turn, the current one included,
   // can be renamed by clicking its underlined name and typing straight into it;
-  // clearing the name puts the default back.
+  // clearing the name puts the default back. Any finished turn can be deleted
+  // with the × after its time, on the list or in Settings' Edit sessions,
+  // which takes it out of the stats and off the leaderboard too.
   (function () {
     var KEY = 'study-timer';
     // Kept apart so a reset leaves it be; renamed once so older saved lengths
     // gave way to the 50/10 default
     var SETTINGS_KEY = 'study-settings-2';
     var HISTORY_KEY = 'study-history';
+    // Start times of deleted study turns, for Friends to take down from the
+    // database (it empties this as it goes, and won't upload them again)
+    var FORGOTTEN_KEY = 'study-forgotten';
     var CHART_DAYS = 5;
     var LABEL = { study: 'Session', brk: 'Break' };
     var BEAT = 5000;
@@ -525,13 +534,91 @@
         var time = document.createElement('span');
         time.className = 'row-year';
         time.textContent = format(lap.ms);
+        time.appendChild(deleteButton(lap));
         li.appendChild(label);
         li.appendChild(time);
         lapsEl.appendChild(li);
       }
       tick();
       stats();
+      if (historyEl.open) renderHistory();
     }
+
+    // A small × after a turn's time; a second click within a few seconds
+    // deletes it
+    function deleteButton(turn) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'study-delete';
+      btn.textContent = '×';
+      btn.title = 'Delete';
+      btn.setAttribute('aria-label', 'Delete');
+      btn.addEventListener('click', function () {
+        if (confirmClick(btn, 'Delete?')) forget(turn);
+      });
+      return btn;
+    }
+
+    // Two records of the same turn: one on the list, one in the history
+    function same(a, b) {
+      return a === b || (!!a.at && a.at === b.at && a.kind === b.kind);
+    }
+
+    // Takes a finished turn off the list and out of the history, so it stops
+    // counting in the stats, and has Friends take it off the leaderboard
+    function forget(turn) {
+      state.laps = state.laps.filter(function (t) { return !same(t, turn); });
+      history = history.filter(function (t) { return !same(t, turn); });
+      takeDown([turn]);
+      save();
+      render();
+    }
+
+    // Notes the study turns among these for Friends to take off the leaderboard
+    function takeDown(turns) {
+      var forgotten = load(FORGOTTEN_KEY) || [];
+      turns.forEach(function (t) {
+        if (t.kind === 'study' && t.at && forgotten.indexOf(t.at) < 0) forgotten.push(t.at);
+      });
+      try { localStorage.setItem(FORGOTTEN_KEY, JSON.stringify(forgotten)); } catch (e) {}
+    }
+
+    // Every study turn in the history, newest first, each with its day,
+    // start time and length, to delete any that shouldn't count (like a
+    // clock left running all night)
+    var historyEl = document.getElementById('history');
+    var historyListEl = document.getElementById('history-list');
+    function renderHistory() {
+      historyListEl.innerHTML = '';
+      var study = history
+        .filter(function (t) { return t.kind === 'study' && t.ms > 0; })
+        .sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+      if (!study.length) {
+        var none = document.createElement('li');
+        none.className = 'row study-history-none';
+        none.textContent = 'No sessions yet';
+        historyListEl.appendChild(none);
+        return;
+      }
+      for (var i = study.length - 1; i >= 0; i--) {
+        var turn = study[i];
+        var li = document.createElement('li');
+        li.className = 'row study-lap';
+        var label = document.createElement('span');
+        label.className = 'study-label';
+        label.textContent = turn.at
+          ? new Date(turn.at).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+          : 'Undated';
+        var time = document.createElement('span');
+        time.className = 'row-year';
+        time.textContent = duration(turn.ms);
+        time.appendChild(deleteButton(turn));
+        li.appendChild(label);
+        li.appendChild(time);
+        historyListEl.appendChild(li);
+      }
+    }
+    historyEl.addEventListener('toggle', function () { if (historyEl.open) renderHistory(); });
 
     // Just what the stats need from a turn
     function record(turn) {
@@ -721,9 +808,11 @@
     lapBtn.addEventListener('click', lap);
     resetBtn.addEventListener('click', reset);
 
-    // Clears the history the stats come from; the turn on the clock carries on
+    // Clears the history the stats come from, here and on the leaderboard;
+    // the turn on the clock carries on
     document.getElementById('reset-stats').addEventListener('click', function () {
       if (!confirmClick(this, 'Erase all stats?')) return;
+      takeDown(history);
       history = [];
       save();
       render();

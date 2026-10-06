@@ -1374,3 +1374,62 @@ p.study-now {
     min-height: 40px;
   }
 }
+
+/* The × after a finished turn's time; faint until its row is pointed at,
+   always there on a touch screen */
+.study-delete {
+  margin: 0 -4px 0 6px;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.study-lap:hover .study-delete,
+.study-delete:focus-visible,
+.study-delete[data-label] {
+  opacity: 1;
+}
+
+.study-delete:hover {
+  color: var(--text);
+}
+
+.study-delete:focus:not(:focus-visible) {
+  outline: none;
+}
+
+@media (hover: none) {
+  .study-delete {
+    opacity: 1;
+  }
+}
+
+/* Settings' list of past sessions, opened from its own line */
+.settings-history > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.settings-history > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-history[open] > summary .study-backup-option {
+  color: var(--text);
+}
+
+.settings-history .study-laps {
+  max-height: 40vh;
+  margin-top: 8px;
+  overflow-y: auto;
+}
+
+.study-history-none {
+  color: var(--muted);
+}
