@@ -67,6 +67,13 @@
   // pretend friends accepting them adds to the board
   var demoPending = [];
   var demoFriends = [];
+  // and pretend strangers, who only show on the global board
+  var demoStrangers = [
+    { id: 'demo-ana', username: 'ana_p', display_name: 'Ana Park', today_ms: 9000000, week_ms: 41000000, all_ms: 520000000, streak: 21 },
+    { id: 'demo-leo', username: 'leo', display_name: 'Leo Grant', today_ms: 5400000, week_ms: 30000000, all_ms: 310000000, streak: 9 },
+    { id: 'demo-priya', username: 'priya_s', display_name: 'Priya Shah', today_ms: 7200000, week_ms: 25000000, all_ms: 400000000, streak: 14 },
+    { id: 'demo-tom', username: 'tomw', display_name: 'Tom Wu', today_ms: 1800000, week_ms: 12000000, all_ms: 90000000, streak: 3 }
+  ];
   var demoTimer;
   function seedDemo() {
     demoFriends = [];
@@ -329,7 +336,7 @@
 
   async function refresh() {
     if (PREVIEW) {
-      rows = [myTotals()].concat(demoFriends);
+      rows = [myTotals()].concat(demoFriends, scope === 'global' ? demoStrangers : []);
       renderBoard();
       renderRequests(demoPending);
       return;
@@ -337,7 +344,11 @@
     // (everyone only when asked for, so the friends board still works on a
     // database that hasn't had the global one added yet)
     var board = await db.rpc('leaderboard', scope === 'global' ? { tz: TZ, everyone: true } : { tz: TZ });
-    if (board.error) { console.error(board.error); return; }
+    if (board.error) {
+      console.error(board.error);
+      if (scope === 'global') toast('Couldn\'t load the global leaderboard');
+      return;
+    }
     rows = board.data;
     var st = await db.from('status').select();
     if (!st.error) {
@@ -361,58 +372,15 @@
   function renderBoard() {
     var sorted = rows.slice().sort(function (a, b) { return live(b, sort) - live(a, sort) || a.display_name.localeCompare(b.display_name); });
     boardEl.innerHTML = '';
-    sorted.forEach(function (row, i) {
-      var li = document.createElement('li');
-      li.className = row.id === me.id ? 'board-me' : '';
-      var entry = document.createElement('details');
-      entry.className = 'entry';
-      entry.open = !!opened[row.id];
-      entry.addEventListener('toggle', function () { opened[row.id] = entry.open; });
-      var summary = document.createElement('summary');
-      var line = document.createElement('div');
-      line.className = 'row';
-      var name = document.createElement('span');
-      name.className = 'row-label';
-      var rank = document.createElement('span');
-      rank.className = 'board-rank';
-      rank.textContent = i + 1;
-      name.appendChild(rank);
-      if (row.avatar_url) {
-        var img = document.createElement('img');
-        img.className = 'board-avatar';
-        img.src = row.avatar_url;
-        img.alt = '';
-        img.referrerPolicy = 'no-referrer';
-        name.appendChild(img);
-      }
-      name.appendChild(document.createTextNode(row.id === me.id ? 'You' : row.display_name));
-      name.title = '@' + row.username;
-      var value = document.createElement('span');
-      value.className = 'row-year board-total';
-      value.dataset.user = row.id;
-      value.dataset.sort = sort;
-      line.appendChild(name);
-      line.appendChild(value);
-      summary.appendChild(line);
-
-      // Every friend gets a line, so who's studying and who isn't reads at a
-      // glance; on the global board, strangers' clocks stay private (the
-      // database only hands over friends' statuses anyway)
-      var st = status(row.id);
-      var mine = scope === 'friends' || row.id === me.id || !!statuses[row.id];
-      if (mine) {
-        var now = document.createElement('p');
-        now.className = !active(st) ? 'board-now board-now-idle'
-          : 'board-now' + (st.kind === 'brk' ? ' board-now-break' : '') + (st.since ? ' board-now-running' : '');
-        now.dataset.user = row.id;
-        summary.appendChild(now);
-      }
-      entry.appendChild(summary);
-      entry.appendChild(statsNote(row));
-      if (mine) entry.appendChild(turnsNote(st));
-      li.appendChild(entry);
-      boardEl.appendChild(li);
-    });
+    if (scope === 'global') {
+      // The global board is a podium of the top 3, plus you wherever you place
+      boardEl.appendChild(podium(sorted.slice(0, 3)));
+      sorted.forEach(function (row, i) {
+        if (i >= 3 && row.id === me.id) boardEl.appendChild(boardRow(row, i));
+      });
+    } else {
+      sorted.forEach(function (row, i) { boardEl.appendChild(boardRow(row, i)); });
+    }
     tickBoard();
 
     Object.keys(SORTS).forEach(function (key) {
@@ -421,6 +389,105 @@
     scopeEl.querySelectorAll('[data-scope]').forEach(function (btn) {
       btn.classList.toggle('active', btn.dataset.scope === scope);
     });
+  }
+
+  // First in the middle and tallest, second on the left, third on the right
+  function podium(top) {
+    var li = document.createElement('li');
+    li.className = 'podium';
+    [1, 0, 2].forEach(function (i) {
+      var row = top[i];
+      if (!row) return;
+      var spot = document.createElement('div');
+      spot.className = 'podium-spot podium-' + (i + 1) + (row.id === me.id ? ' board-me' : '');
+      spot.title = '@' + row.username;
+      if (row.avatar_url) {
+        var img = document.createElement('img');
+        img.className = 'podium-avatar';
+        img.src = row.avatar_url;
+        img.alt = '';
+        img.referrerPolicy = 'no-referrer';
+        spot.appendChild(img);
+      }
+      var name = document.createElement('span');
+      name.className = 'podium-name';
+      name.textContent = row.id === me.id ? 'You' : row.display_name;
+      spot.appendChild(name);
+      var value = document.createElement('span');
+      value.className = 'podium-total board-total';
+      value.dataset.user = row.id;
+      value.dataset.sort = sort;
+      spot.appendChild(value);
+      var step = document.createElement('div');
+      step.className = 'podium-step';
+      step.appendChild(medal(i));
+      spot.appendChild(step);
+      li.appendChild(spot);
+    });
+    return li;
+  }
+
+  // A crown for 1st, then silver and bronze
+  function medal(i) {
+    var el = document.createElement('span');
+    el.className = 'medal';
+    el.textContent = ['👑', '🥈', '🥉'][i];
+    el.setAttribute('aria-label', ['1st', '2nd', '3rd'][i] + ' place');
+    return el;
+  }
+
+  // One person's line on the board, opening to their stats and turns
+  function boardRow(row, i) {
+    var li = document.createElement('li');
+    li.className = row.id === me.id ? 'board-me' : '';
+    var entry = document.createElement('details');
+    entry.className = 'entry';
+    entry.open = !!opened[row.id];
+    entry.addEventListener('toggle', function () { opened[row.id] = entry.open; });
+    var summary = document.createElement('summary');
+    var line = document.createElement('div');
+    line.className = 'row';
+    var name = document.createElement('span');
+    name.className = 'row-label';
+    var rank = document.createElement('span');
+    rank.className = 'board-rank';
+    rank.appendChild(i < 3 ? medal(i) : document.createTextNode(i + 1));
+    name.appendChild(rank);
+    if (row.avatar_url) {
+      var img = document.createElement('img');
+      img.className = 'board-avatar';
+      img.src = row.avatar_url;
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      name.appendChild(img);
+    }
+    name.appendChild(document.createTextNode(row.id === me.id ? 'You' : row.display_name));
+    name.title = '@' + row.username;
+    var value = document.createElement('span');
+    value.className = 'row-year board-total';
+    value.dataset.user = row.id;
+    value.dataset.sort = sort;
+    line.appendChild(name);
+    line.appendChild(value);
+    summary.appendChild(line);
+
+    // Every friend gets a line, so who's studying and who isn't reads at a
+    // glance; on the global board, strangers' clocks stay private (the
+    // database only hands over friends' statuses anyway)
+    var st = status(row.id);
+    var mine = scope === 'friends' || row.id === me.id || !!statuses[row.id];
+    if (mine) {
+      var now = document.createElement('p');
+      now.className = !active(st) ? 'board-now board-now-idle'
+        : 'board-now' + (st.kind === 'brk' ? ' board-now-break' : '') + (st.since ? ' board-now-running' : '');
+      now.dataset.user = row.id;
+      summary.appendChild(now);
+    }
+    entry.appendChild(summary);
+    entry.appendChild(usernameNote(row));
+    if (mine) entry.appendChild(turnsNote(st));
+    li.appendChild(entry);
+    return li;
   }
 
   // The line under each person: whether they're studying, and where
@@ -438,35 +505,28 @@
     });
   }
 
-  // Opening someone shows their stats, the same four as your own
-  function statsNote(row) {
-    var note = document.createElement('div');
-    note.className = 'row-note board-stats';
-    Object.keys(SORTS).forEach(function (key) {
-      var line = document.createElement('div');
-      line.className = 'row';
-      var label = document.createElement('span');
-      label.textContent = SORTS[key].label;
-      var value = document.createElement('span');
-      value.className = 'row-year board-total';
-      value.dataset.user = row.id;
-      value.dataset.sort = key;
-      line.appendChild(label);
-      line.appendChild(value);
-      note.appendChild(line);
-    });
+  // Opening someone shows their username, above their last session
+  function usernameNote(row) {
+    var note = document.createElement('p');
+    note.className = 'row-note board-username';
+    note.textContent = '@' + row.username;
     return note;
   }
 
-  // Opening someone lists the turns on their timer, newest first
+  // Opening someone shows just their most recent finished study turn
   function turnsNote(st) {
     var note = document.createElement('div');
     note.className = 'row-note';
-    var laps = st && Date.now() - Date.parse(st.updated_at) < STALE ? st.laps.slice().reverse() : [];
+    var laps = st && Date.now() - Date.parse(st.updated_at) < STALE
+      ? st.laps.filter(function (lap) { return lap.kind !== 'brk'; }).slice(-1) : [];
     if (!laps.length) {
       note.textContent = 'No sessions yet';
       return note;
     }
+    var heading = document.createElement('p');
+    heading.className = 'board-last';
+    heading.textContent = 'Last session';
+    note.appendChild(heading);
     var list = document.createElement('ol');
     list.className = 'study-laps';
     laps.forEach(function (lap) {

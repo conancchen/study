@@ -171,24 +171,13 @@
   <div class="study-chart" id="chart" role="img"></div>
   <p class="study-chart-caption" id="chart-caption"></p>
 </section>
-
-<section class="block study-ambient" id="ambient">
-  <h2 class="block-label block-label-plain ambient-label"><span>Ambient</span><button class="icon-button ambient-mute" id="ambient-mute" type="button" aria-pressed="true" aria-label="Unmute" title="Unmute">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M4 9h3l4.3-3.6a.5.5 0 0 1 .7.4v12.4a.5.5 0 0 1-.7.4L7 15H4a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1z" fill="currentColor"></path>
-      <path class="ambient-mute-on" d="M15.5 9a4.5 4.5 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"></path>
-      <path class="ambient-mute-off" d="M16 9.5l5 5M21 9.5l-5 5"></path>
-    </svg>
-  </button></h2>
-  <div id="ambient-sounds"></div>
-</section>
 </div>
 </aside>
 
 <aside class="study-side study-side-right" id="side-right">
 <div class="study-side-inner" id="side-right-inner">
 <section class="block study-friends" id="friends" hidden>
-  <h2 class="block-label block-label-plain friends-label"><span>Friends</span><button class="icon-button friends-notify" id="friends-notify" type="button" aria-expanded="false" aria-controls="requests" aria-label="Notifications" title="Notifications" hidden>
+  <h2 class="block-label block-label-plain friends-label"><span>Social</span><button class="icon-button friends-notify" id="friends-notify" type="button" aria-expanded="false" aria-controls="requests" aria-label="Notifications" title="Notifications" hidden>
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
       <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
@@ -1133,7 +1122,7 @@
       input.onblur = function () { if (!input.value.trim()) form.remove(); };
     }
 
-    // Stats and Ambient on the left, Friends and Map on the right, sit in sidebars
+    // Stats on the left, Friends and Map on the right, sit in sidebars
     // that slide off to the edges of the screen, both at once, with a click
     // on the three bars at the top left of the middle column. With room beside the clock they
     // start open on every visit. On a narrow screen
@@ -1209,7 +1198,6 @@
       document.documentElement.classList.remove('anim-hide');
     }
   </script>
-  <script src="./ambient.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
   <script src="./friends.js"></script>

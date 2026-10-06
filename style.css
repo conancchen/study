@@ -863,108 +863,6 @@ p.study-now {
   font-variant-numeric: tabular-nums;
 }
 
-/* Ambient: a speaker at the right of the heading mutes everything; each
-   sound's name turns it on and off, with its volume beside it */
-.ambient-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.ambient-mute {
-  padding: 2px;
-}
-
-.ambient-mute:focus:not(:focus-visible) {
-  outline: none;
-}
-
-.ambient-mute[aria-pressed=true] {
-  color: var(--text);
-}
-
-.ambient-mute .ambient-mute-off {
-  display: none;
-}
-
-.ambient-mute[aria-pressed=true] .ambient-mute-off {
-  display: inline;
-}
-
-.ambient-mute[aria-pressed=true] .ambient-mute-on {
-  display: none;
-}
-
-.ambient-sound {
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 3px 0;
-}
-
-.ambient-toggle {
-  font: inherit;
-  color: var(--muted);
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  transition: color 0.15s ease;
-}
-
-.ambient-toggle:hover,
-.ambient-toggle[aria-pressed=true] {
-  color: var(--text);
-}
-
-.ambient-toggle:focus:not(:focus-visible) {
-  outline: none;
-}
-
-.ambient-volume {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 110px;
-  height: 16px;
-  margin: 0;
-  background: none;
-  cursor: pointer;
-  opacity: 0.45;
-  transition: opacity 0.15s ease;
-}
-
-.ambient-sound:has([aria-pressed=true]) .ambient-volume,
-.ambient-volume:hover {
-  opacity: 1;
-}
-
-.ambient-volume::-webkit-slider-runnable-track {
-  height: 2px;
-  background: var(--underline);
-}
-
-.ambient-volume::-moz-range-track {
-  height: 2px;
-  background: var(--underline);
-}
-
-.ambient-volume::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 10px;
-  height: 10px;
-  margin-top: -4px;
-  border-radius: 50%;
-  background: var(--text);
-}
-
-.ambient-volume::-moz-range-thumb {
-  width: 10px;
-  height: 10px;
-  border: none;
-  border-radius: 50%;
-  background: var(--text);
-}
-
 #copy-toast {
   position: fixed;
   left: 50%;
@@ -1025,6 +923,79 @@ p.study-now {
 
 .board-sort {
   margin: 0 0 8px;
+}
+
+/* The global board's top 3, standing on steps */
+.podium {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+
+.podium-spot {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.podium-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  margin-bottom: 2px;
+}
+
+.podium-1 .podium-avatar {
+  width: 36px;
+  height: 36px;
+}
+
+.podium-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.podium-total {
+  color: var(--muted);
+  font-size: calc(12px * var(--base-scale, 1) * var(--text-scale, 1));
+  font-variant-numeric: tabular-nums;
+}
+
+.podium-step {
+  align-self: stretch;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-radius: 6px 6px 0 0;
+  background: var(--chip-bg);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.podium-1 .podium-step { height: 56px; }
+.podium-2 .podium-step { height: 40px; }
+.podium-3 .podium-step { height: 28px; }
+
+.podium-step .medal {
+  font-size: 20px;
+}
+
+.podium-1 .podium-step .medal {
+  font-size: 24px;
+}
+
+/* The top 3 get medals, on the podium and the board */
+.medal {
+  line-height: 1;
 }
 
 .board-sort .active {
@@ -1103,7 +1074,7 @@ p.study-now {
   padding-left: 1.4em;
 }
 
-/* Stats and Ambient on the left, Friends on the right, in sidebars along
+/* Stats on the left, Friends on the right, in sidebars along
    the edges of the screen. Each slides off to its edge when shut, leaving
    just its handle. With room beside the clock they sit open next to it;
    on a narrower screen they float over the page instead. */
@@ -1263,16 +1234,19 @@ p.study-now {
   color: var(--text);
 }
 
-/* A friend's stats, opened from the board, above their turns */
-.board-stats .row {
-  padding: 2px 0;
+/* A friend's username and last session, opened from the board */
+.board-username,
+.board-last {
+  margin: 0 0 2px;
+  color: var(--muted);
+  font-size: calc(12px * var(--base-scale, 1) * var(--text-scale, 1));
 }
 
-.board-stats {
-  padding-bottom: 10px;
+.board-username {
+  padding-bottom: 4px;
 }
 
-/* Friends: a bell at the right of the heading, like Ambient's mute, opens
+/* Friends: a bell at the right of the heading opens
    the friend requests, with a red count on it while any are waiting */
 .friends-label {
   display: flex;
