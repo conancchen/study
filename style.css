@@ -3,7 +3,7 @@
 /**************/
 :root {
   color-scheme: light;
-  --bg: #fbfaf8;
+  --bg: #fff;
   --text: #16150f;
   --muted: #8a8a8a;
   --rule: #e0dfdb;
@@ -61,7 +61,9 @@ body {
   color: var(--text);
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   font-size: calc(14px * var(--base-scale, 1) * var(--text-scale, 1));
-  line-height: 1.6;
+  /* Spaced like the home page: a 20px line at 14px, letters a hair tight */
+  line-height: calc(20 / 14);
+  letter-spacing: -0.09px;
 }
 
 a {
@@ -79,9 +81,9 @@ a:focus {
   color: var(--text);
   text-decoration: underline;
   text-decoration-color: var(--underline);
-  text-decoration-thickness: 1px;
+  text-decoration-thickness: 1.25px;
   text-decoration-skip-ink: none;
-  text-underline-offset: 4px;
+  text-underline-offset: 3px;
   transition: text-decoration-color 0.15s ease;
 }
 
@@ -148,9 +150,9 @@ a:focus {
 /**************/
 .page {
   width: 100%;
-  max-width: 568px;
+  max-width: 582px;
   margin: 0 auto;
-  padding: 64px 24px 48px;
+  padding: 64px 16px 48px;
 }
 
 .header {
@@ -432,6 +434,8 @@ a:focus {
   padding: 0;
   cursor: pointer;
   text-decoration: underline dotted;
+  text-decoration-thickness: 1.25px;
+  text-decoration-skip-ink: none;
   text-underline-offset: 3px;
 }
 
@@ -520,9 +524,11 @@ a:focus {
   border: none;
   padding: 0;
   outline: none;
-  text-decoration: underline dotted;
+  text-decoration: underline;
   text-decoration-color: var(--underline);
-  text-underline-offset: 4px;
+  text-decoration-thickness: 1.25px;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
 }
 
 /* The filled-in rest of a place shows as faint text rather than a
@@ -692,9 +698,11 @@ p.study-now {
   white-space: nowrap;
   cursor: text;
   outline: none;
-  text-decoration: underline dotted;
+  text-decoration: underline;
   text-decoration-color: var(--underline);
-  text-underline-offset: 4px;
+  text-decoration-thickness: 1.25px;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
   transition: text-decoration-color 0.15s ease;
 }
 
@@ -748,7 +756,7 @@ p.study-now {
   text-align: center;
   background: none;
   border: none;
-  border-bottom: 1px dotted var(--underline);
+  border-bottom: 1.25px solid var(--underline);
   border-radius: 0;
   padding: 0;
   outline: none;
@@ -1126,7 +1134,7 @@ p.study-now {
 
 @media screen and (min-width: 1200px) {
   .study-side {
-    width: calc(50% - 284px - 24px);
+    width: calc(50% - 291px - 24px);
     box-shadow: none;
     border: none;
     background: transparent;
@@ -1159,7 +1167,7 @@ p.study-now {
   color: var(--text);
   background: none;
   border: none;
-  border-bottom: 1px dotted var(--muted);
+  border-bottom: 1.25px solid var(--muted);
   padding: 4px 0;
   outline: none;
 }

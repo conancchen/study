@@ -7,7 +7,7 @@
   <!-- Runs before paint so the saved theme applies without a flash -->
   <script>
     (function () {
-      document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'dark');
+      document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
 
       // Hides the page before first paint, so it never
       // flashes fully rendered first. Skipped entirely under reduced motion,
