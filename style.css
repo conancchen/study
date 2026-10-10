@@ -61,9 +61,14 @@ body {
   color: var(--text);
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   font-size: calc(14px * var(--base-scale, 1) * var(--text-scale, 1));
+  font-weight: 436;
   /* Spaced like the home page: a 20px line at 14px, letters a hair tight */
   line-height: calc(20 / 14);
   letter-spacing: -0.09px;
+  /* Rendered like the home page, so the same weight reads the same */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 a {
@@ -168,7 +173,7 @@ a:focus {
 
 .header h1 {
   font-size: calc(14px * var(--base-scale, 1) * var(--text-scale, 1));
-  font-weight: 400;
+  font-weight: 474;
   margin: 0;
 }
 
@@ -206,35 +211,14 @@ a:focus {
   color: var(--text);
 }
 
-.icon-yinyang {
-  --angle: 0deg;
-  color: #000;
-  transform: rotate(var(--angle));
-  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.icon-yinyang .yang,
-:root[data-theme=dark] .icon-yinyang .yin {
+/* The theme toggle shows a moon on the light page and a sun on the dark one */
+.icon-theme .icon-sun,
+:root[data-theme=dark] .icon-theme .icon-moon {
   display: none;
 }
 
-:root[data-theme=dark] .icon-yinyang .yang {
+:root[data-theme=dark] .icon-theme .icon-sun {
   display: inline;
-}
-
-:root[data-theme=dark] .icon-yinyang {
-  color: #fff;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .icon-yinyang {
-    transition: none;
-  }
-}
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation: none;
-  mix-blend-mode: normal;
 }
 
 .bio p {
@@ -261,7 +245,7 @@ a:focus {
 }
 
 .block-label-plain {
-  font-weight: 400;
+  font-weight: inherit;
 }
 
 .row {
@@ -275,7 +259,7 @@ a:focus {
 .row-label {
   min-width: 0;
   overflow: hidden;
-  font-weight: 400;
+  font-weight: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -338,7 +322,7 @@ a:focus {
 }
 .row-link {
   color: var(--text);
-  font-weight: 400;
+  font-weight: inherit;
 }
 
 .lane {
@@ -420,7 +404,7 @@ a:focus {
 .subtitle {
   color: var(--muted);
   font-size: calc(14px * var(--base-scale, 1) * var(--text-scale, 1));
-  font-weight: 400;
+  font-weight: inherit;
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
@@ -500,7 +484,7 @@ a:focus {
   max-width: 100%;
   margin: 0;
   font-size: calc(16px * var(--base-scale, 1) * var(--text-scale, 1));
-  font-weight: 400;
+  font-weight: inherit;
   letter-spacing: -0.01em;
   line-height: 1.3;
 }
@@ -887,12 +871,20 @@ p.study-now {
   z-index: 1000;
 }
 
+/* Phones get the home page's 24px side margins */
+@media screen and (max-width: 639px) {
+  .page {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+
 @media screen and (max-width: 480px) {
   :root {
     --base-scale: calc(13.5 / 14);
   }
   .page {
-    padding: 24px 20px 20px;
+    padding: 24px 24px 20px;
   }
   .header {
     margin-bottom: 12px;
